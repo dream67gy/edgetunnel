@@ -31,6 +31,7 @@ def cloud(route):
         route.fulfill(json=shared)
     elif hold:
         pending.append(route)
+        page.evaluate('window.heldSyncReached = true')
     elif request.headers.get('if-none-match') == f'"eat-pool-{shared["revision"]}"':
         responses.append(304)
         route.fulfill(status=304, body='')
@@ -39,9 +40,17 @@ def cloud(route):
         route.fulfill(json=shared)
 
 
+def start_held_sync():
+    page.evaluate('() => { window.heldSyncReached = false; void syncPool(); }')
+    # Wait for the network interceptor, not just the flag set before fetch starts.
+    page.wait_for_function('syncing && window.heldSyncReached')
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path=os.environ.get('CHROME_BIN'), headless=True)
     page = browser.new_page(viewport={'width': 1440, 'height': 1100})
+    cdp = page.context.new_cdp_session(page)
+    cdp.send('Emulation.setCPUThrottlingRate', {'rate': 4})
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.route('**/eat/', lambda route: route.fulfill(content_type='text/html', body=html))
@@ -49,9 +58,19 @@ with sync_playwright() as p:
     page.goto(url)
     page.wait_for_function('cloudReady && !syncing')
     expect(page.locator('.shop')).to_have_count(100)
+    assert page.locator('#inspirations').count() == 0
+    assert '给胃一点新灵感' not in page.locator('body').inner_text()
+
+    # Scrolling to a distant card must not collapse the rows outside the viewport.
+    heights = page.locator('.shop').evaluate_all('(rows) => rows.map(row => row.getBoundingClientRect().height)')
+    assert min(heights) >= 70, f'Cards collapsed in a long list: {heights}'
 
     # Unchanged polling must retain nodes, keyboard focus and list scroll position.
     page.locator('.shop input').nth(30).focus()
+    page.evaluate("""async () => {
+      await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }""")
     page.evaluate("""() => {
       window.snap = {
         wheel: $('wheel').firstChild, card: $('cards').firstChild,
@@ -65,17 +84,28 @@ with sync_playwright() as p:
     }""")
     for _ in range(5):
         page.evaluate('syncPool()')
+        page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
     assert responses.count(304) == 5
-    assert page.evaluate("""() => childChanges === 0 && snap.wheel === $('wheel').firstChild &&
-      snap.card === $('cards').firstChild && snap.history === $('history').firstChild &&
-      snap.chip === $('filters').firstChild && snap.focus === document.activeElement &&
-      snap.scroll === $('cards').scrollTop""")
+    idle = page.evaluate("""() => ({
+      childChanges,
+      wheelRetained: snap.wheel === $('wheel').firstChild,
+      cardRetained: snap.card === $('cards').firstChild,
+      historyRetained: snap.history === $('history').firstChild,
+      chipRetained: snap.chip === $('filters').firstChild,
+      focusRetained: snap.focus === document.activeElement,
+      scrollBefore: snap.scroll,
+      scrollAfter: $('cards').scrollTop
+    })""")
+    assert idle['childChanges'] == 0, idle
+    for key in ['wheelRetained', 'cardRetained', 'historyRetained', 'chipRetained', 'focusRetained']:
+        assert idle[key], f'{key}: {idle}'
+    assert idle['scrollBefore'] == idle['scrollAfter'], f'List scrolled during idle sync: {idle}'
     page.evaluate('observer.disconnect()')
+    cdp.send('Emulation.setCPUThrottlingRate', {'rate': 1})
 
     # A slow background GET must not disable editing or replace a newly opened draft.
     hold = True
-    page.evaluate('void syncPool()')
-    page.wait_for_function('syncing')
+    start_held_sync()
     expect(page.locator('#add')).to_be_enabled()
     expect(page.locator('#spin')).to_be_enabled()
     assert pending
@@ -95,8 +125,7 @@ with sync_playwright() as p:
 
     # A save can cancel an already running background GET without a false error.
     hold = True
-    page.evaluate('void syncPool()')
-    page.wait_for_function('syncing')
+    start_held_sync()
     page.locator('.shop .icon-btn').first.click()
     page.locator('#shop-name').fill('保存优先')
     page.locator('#shop-form button[type=submit]').click()
@@ -132,8 +161,7 @@ with sync_playwright() as p:
     # Start a spin with a GET in flight: the response cannot change the wheel.
     page.emulate_media(reduced_motion='no-preference')
     hold = True
-    page.evaluate('void syncPool()')
-    page.wait_for_function('syncing')
+    start_held_sync()
     page.locator('#spin').click()
     assert pending
     pending.pop().fulfill(json=stale)
@@ -145,21 +173,24 @@ with sync_playwright() as p:
     assert page.locator('.result.revealed').count() == 1
     assert page.evaluate("$('wheel').style.willChange === ''")
 
-    # New templates open an editable draft and respect the 100-shop limit.
-    page.locator('.inspiration').filter(has_text='暖胃稀饭').click()
+    # The normal editor supports new food types and respects the 100-shop limit.
+    page.locator('#add').click()
     expect(page.locator('#toast')).to_contain_text('最多放 100 家店')
     shared['shops'] = shared['shops'][:6]
     shared['revision'] += 1
     page.evaluate('syncPool()')
-    page.locator('.inspiration').filter(has_text='西餐牛排').click()
-    assert page.locator('#shop-name').input_value() == '西餐牛排'
-    assert page.locator('#shop-emoji').input_value() == '🥩'
+    page.locator('#add').click()
+    page.locator('#shop-name').fill('西餐牛排')
+    page.locator('#shop-emoji').select_option('🥩')
+    page.locator('#shop-category').select_option('晚餐')
     page.locator('#shop-form button[type=submit]').click()
     expect(page.locator('#editor')).not_to_be_visible()
     assert shared['shops'][-1]['emoji'] == '🥩'
     assert page.locator('#flavor-filter').input_value() == ''
-    page.locator('.inspiration').filter(has_text='暖胃稀饭').click()
-    assert page.locator('#shop-category').input_value() == '早餐'
+    page.locator('#add').click()
+    page.locator('#shop-name').fill('暖胃稀饭')
+    page.locator('#shop-emoji').select_option('🥣')
+    page.locator('#shop-category').select_option('早餐')
     page.locator('#shop-form button[type=submit]').click()
     expect(page.locator('#editor')).not_to_be_visible()
     assert shared['shops'][-1]['emoji'] == '🥣'
@@ -170,5 +201,5 @@ with sync_playwright() as p:
     assert not errors, errors
     print('PASS: 100-shop idle sync has zero DOM replacements; 304; focus/scroll retained; '
           'slow-sync edit/save/spin races; cuisine filters; consecutive spins; reduced motion; '
-          'new food templates save and reload')
+          'editor saves and reloads new food types; inspiration shelf removed')
     browser.close()

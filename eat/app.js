@@ -13,20 +13,6 @@ const $ = id => document.getElementById(id),
     { name: '墨西哥菜', icons: ['🌮'] },
     { name: '海鲜', icons: ['🦞'] },
     { name: '甜点 / 饮品', icons: ['🍰', '🧋'] }
-  ],
-  inspirations = [
-    { name: '暖胃稀饭', emoji: '🥣', category: '早餐', note: '白粥、小米粥或皮蛋瘦肉粥，配点小菜' },
-    { name: '西餐牛排', emoji: '🥩', category: '晚餐', note: '牛排配土豆泥，今天吃得有仪式感' },
-    { name: '意式面馆', emoji: '🍝', category: '随时', note: '番茄肉酱面或奶油蘑菇面' },
-    { name: '早茶点心', emoji: '🥟', category: '早餐', note: '虾饺、烧卖、肠粉，慢慢吃一顿' },
-    { name: '日式咖喱饭', emoji: '🍛', category: '午餐', note: '热乎乎的咖喱，记得加个蛋' },
-    { name: '韩式拌饭', emoji: '🥘', category: '随时', note: '石锅拌饭、泡菜汤，也可以来份部队锅' },
-    { name: '墨西哥塔可', emoji: '🌮', category: '随时', note: '玉米饼裹上肉和蔬菜，来点新鲜口味' },
-    { name: '法式可颂', emoji: '🥐', category: '早餐', note: '酥酥的可颂搭一杯咖啡' },
-    { name: '海鲜小馆', emoji: '🦞', category: '晚餐', note: '清蒸鱼、鲜虾或海鲜煲' },
-    { name: '蔬菜轻食碗', emoji: '🥗', category: '午餐', note: '蔬菜、谷物和蛋白质，都来一点' },
-    { name: '深夜烤串', emoji: '🍢', category: '夜宵', note: '和饭搭子一起吃点热乎的' },
-    { name: '热汤面馆', emoji: '🍜', category: '随时', note: '牛肉面、乌冬面或一碗馄饨面' }
   ];
 let state = {
     version: 1,
@@ -276,7 +262,6 @@ function render() {
   $('clear-history').disabled = spinning || !state.history.length;
   $('flavor-filter').disabled = spinning || saving;
   $('flavor-filter').value = flavor;
-  $('inspirations').querySelectorAll('button').forEach(b => b.disabled = locked);
   if (!$('filters').childElementCount) categories.forEach(c => {
     const b = element('button', 'chip' + (filter === c ? ' active' : ''), c);
     b.setAttribute('aria-pressed', String(filter === c));
@@ -297,12 +282,14 @@ function render() {
     cardsKey = nextCardsKey;
     const fragment = document.createDocumentFragment();
     const shown = state.shops.filter(matchesFilters);
-    $('cards').classList.toggle('large-pool', shown.length > 30);
-    if (!shown.length) fragment.append(element('div', 'empty', state.shops.length ? '这个口味还没有店铺，换个筛选或从下方灵感里加一道吧。' : '这里还没有店铺，从下方灵感菜单开始吧。'));
+    if (!shown.length) fragment.append(element('div', 'empty', state.shops.length ? '这个口味还没有店铺，换个筛选或添加一家喜欢的小店吧。' : '这里还没有店铺，添加一家喜欢的小店吧。'));
     shown.forEach(s => {
       const row = element('div', 'shop' + (s.enabled ? '' : ' off'));
       row.dataset.id = s.id;
-      row.append(element('div', 'food-icon', s.emoji));
+      const icon = element('div', 'food-icon', s.emoji);
+      const flavorIndex = flavors.findIndex(f => f.icons.includes(s.emoji));
+      icon.style.background = ['#f6e0d3', '#f5ecd4', '#ede5d2', '#f5e2d5', '#e4e9d8', '#dfe9d8', '#f2e7cb', '#e1e9eb', '#efe0e7'][flavorIndex] || '#f3ebd6';
+      row.append(icon);
       const copy = element('div', 'shop-copy');
       copy.append(element('div', 'shop-name', s.name), element('div', 'shop-meta', [s.category, s.price === null ? '预算随心' : '¥' + s.price + ' / 人', s.note].filter(Boolean).join(' · ')));
       row.append(copy);
@@ -521,20 +508,6 @@ $('flavor-filter').onchange = () => {
   resetResult();
   render()
 };
-inspirations.forEach(s => {
-  const button = element('button', 'inspiration');
-  button.type = 'button';
-  button.append(element('span', 'inspiration-icon', s.emoji), element('span', '', s.name), element('span', 'inspiration-plus', '＋'));
-  button.onclick = () => {
-    openEditor();
-    if (!$('editor').open) return;
-    $('shop-name').value = s.name;
-    $('shop-emoji').value = s.emoji;
-    $('shop-category').value = s.category;
-    $('shop-note').value = s.note
-  };
-  $('inspirations').append(button)
-});
 $('close-editor').onclick = $('cancel-editor').onclick = () => $('editor').close();
 $('shop-form').onsubmit = async e => {
   e.preventDefault();

@@ -167,6 +167,11 @@ h1 span {
   overflow: hidden
 }
 
+.lottery,
+.pool {
+  box-shadow: 0 8px 28px #293b3006
+}
+
 .panel-top {
   display: flex;
   align-items: center;
@@ -310,7 +315,10 @@ h1 span {
 }
 
 .pool {
-  padding: 4px 0
+  padding: 25px 24px;
+  border: 1px solid #e0dfd2;
+  border-radius: 26px;
+  background: #fffdf7
 }
 
 .pool-head {
@@ -321,15 +329,22 @@ h1 span {
 }
 
 .pool-head h2 {
-  font-size: 21px;
-  margin: 0
+  font-size: 20px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px
 }
 
 .pool-head h2 small {
-  font-weight: 400;
-  color: var(--muted);
-  font-size: 13px;
-  margin-left: 8px
+  font-weight: 600;
+  color: #6f7c65;
+  font-size: 11px;
+  white-space: nowrap;
+  border-radius: 20px;
+  padding: 4px 8px;
+  background: #eef1e6
 }
 
 .soft-btn {
@@ -352,23 +367,42 @@ h1 span {
   border-radius: 10px;
   padding: 11px 16px;
   font-size: 13px;
-  font-weight: 700
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: transform .15s
+}
+
+.add-button:enabled:active {
+  transform: scale(.96)
+}
+
+.filter-bar {
+  background: #f6f3eb;
+  border: 1px solid #ece6d9;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 16px
 }
 
 .filters {
   display: flex;
-  gap: 7px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 17px
+  margin-bottom: 10px
 }
 
 .chip {
   border: 1px solid var(--line);
   background: transparent;
   color: #78806f;
-  padding: 7px 12px;
+  padding: 7px 11px;
   border-radius: 20px;
-  font-size: 12px
+  font-size: 12px;
+  transition: transform .15s
+}
+
+.chip:enabled:active {
+  transform: scale(.96)
 }
 
 .chip.active {
@@ -383,23 +417,23 @@ h1 span {
   gap: 10px;
   max-height: 510px;
   overflow: auto;
-  padding: 2px 5px 5px 2px
+  padding: 2px 5px 5px 2px;
+  scrollbar-width: thin;
+  scrollbar-color: #c4ccb7 transparent;
+  scrollbar-gutter: stable
 }
 
 .shop {
-  background: #fffdf7;
+  background: #fffefb;
   border: 1px solid #e2e2d7;
   border-radius: 15px;
   padding: 13px 14px;
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  contain: layout style;
   transition: opacity .2s, transform .2s
-}
-
-.cards.large-pool .shop {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 75px
 }
 
 .shop:hover {
@@ -434,7 +468,7 @@ h1 span {
 
 .shop-meta {
   font-size: 11px;
-  color: #8a8a7d;
+  color: #77806f;
   margin-top: 5px;
   overflow-wrap: anywhere;
   line-height: 1.5
@@ -740,7 +774,9 @@ dialog p {
   gap: 10px;
   color: var(--muted);
   font-size: 12px;
-  margin: 0 0 16px
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid #e6e1d5
 }
 
 .flavor-picker select {
@@ -752,65 +788,6 @@ dialog p {
   background: #fffdf7;
   color: var(--ink);
   font-size: 12px
-}
-
-.inspiration-shelf {
-  margin-top: 22px;
-  padding: 16px;
-  border-radius: 17px;
-  background: #f0ebdc;
-  border: 1px solid #e3dbc7
-}
-
-.inspiration-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px
-}
-
-.inspiration-head h3 {
-  margin: 0;
-  font-size: 13px
-}
-
-.inspiration-head>span {
-  font-size: 10px;
-  color: var(--muted)
-}
-
-.inspirations {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px
-}
-
-.inspiration {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 7px;
-  border: 1px solid #e5dfd0;
-  border-radius: 11px;
-  background: #fffdf7;
-  color: var(--ink);
-  font-size: 11px;
-  transition: transform .18s
-}
-
-.inspiration-icon {
-  font-size: 20px;
-  flex-shrink: 0
-}
-
-.inspiration-plus {
-  margin-left: auto;
-  color: var(--red)
-}
-
-.inspiration:active {
-  transform: scale(.96)
 }
 
 .shop.winner {
@@ -851,20 +828,6 @@ dialog[open] {
 @keyframes dialog-arrive {
   from { transform: translateY(10px); opacity: 0 }
   to { transform: translateY(0); opacity: 1 }
-}
-
-@media(hover:hover) {
-  .inspiration:enabled:hover {
-    transform: translateY(-2px)
-  }
-  .inspiration:enabled:hover .inspiration-icon {
-    animation: food-wiggle .35s ease-in-out
-  }
-}
-
-@keyframes food-wiggle {
-  35% { transform: rotate(-12deg) }
-  70% { transform: rotate(10deg) }
 }
 
 @media(max-width:760px) {
@@ -934,7 +897,7 @@ dialog[open] {
   }
 
   .pool {
-    padding: 0 2px
+    padding: 20px 16px
   }
 
   .cards {
@@ -942,7 +905,36 @@ dialog[open] {
   }
 
   .pool-head h2 {
-    font-size: 20px
+    font-size: 18px
+  }
+
+  .pool-head {
+    gap: 10px
+  }
+
+  .add-button {
+    padding: 11px 12px;
+    font-size: 12px
+  }
+
+  .shop {
+    padding: 12px 10px;
+    gap: 9px
+  }
+
+  .food-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 23px
+  }
+
+  .flavor-picker {
+    flex-wrap: wrap;
+    font-size: 11px
+  }
+
+  .flavor-picker select {
+    max-width: 100%
   }
 
   footer {
@@ -955,9 +947,6 @@ dialog[open] {
     margin-top: 16px
   }
 
-  .inspirations {
-    grid-template-columns: repeat(2, minmax(0, 1fr))
-  }
 }
 
 @media(prefers-reduced-motion:reduce) {
