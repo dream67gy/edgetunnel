@@ -207,7 +207,8 @@ h1 span {
 .wheel {
   width: 100%;
   height: 100%;
-  transition: transform 4.6s cubic-bezier(.15, .65, .12, 1)
+  contain: layout paint;
+  transition: transform 3.8s cubic-bezier(.12, .68, .12, 1)
 }
 
 .wheel svg {
@@ -225,7 +226,7 @@ h1 span {
   background: var(--red);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   z-index: 3;
-  filter: drop-shadow(0 3px 2px #0003)
+  transform-origin: 50% 15%
 }
 
 .wheel-center {
@@ -394,6 +395,11 @@ h1 span {
   align-items: center;
   gap: 12px;
   transition: opacity .2s, transform .2s
+}
+
+.cards.large-pool .shop {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 75px
 }
 
 .shop:hover {
@@ -627,8 +633,7 @@ dialog {
 }
 
 dialog::backdrop {
-  background: #20332966;
-  backdrop-filter: blur(4px)
+  background: #20332980
 }
 
 .dialog-head {
@@ -723,9 +728,143 @@ dialog p {
 
 @keyframes fall {
   to {
-    transform: translateY(105vh) rotate(650deg);
+    transform: translate(var(--drift), 105vh) rotate(var(--twist));
     opacity: 0
   }
+}
+
+.flavor-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 16px
+}
+
+.flavor-picker select {
+  min-width: 0;
+  max-width: 65%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: #fffdf7;
+  color: var(--ink);
+  font-size: 12px
+}
+
+.inspiration-shelf {
+  margin-top: 22px;
+  padding: 16px;
+  border-radius: 17px;
+  background: #f0ebdc;
+  border: 1px solid #e3dbc7
+}
+
+.inspiration-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px
+}
+
+.inspiration-head h3 {
+  margin: 0;
+  font-size: 13px
+}
+
+.inspiration-head>span {
+  font-size: 10px;
+  color: var(--muted)
+}
+
+.inspirations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px
+}
+
+.inspiration {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 7px;
+  border: 1px solid #e5dfd0;
+  border-radius: 11px;
+  background: #fffdf7;
+  color: var(--ink);
+  font-size: 11px;
+  transition: transform .18s
+}
+
+.inspiration-icon {
+  font-size: 20px;
+  flex-shrink: 0
+}
+
+.inspiration-plus {
+  margin-left: auto;
+  color: var(--red)
+}
+
+.inspiration:active {
+  transform: scale(.96)
+}
+
+.shop.winner {
+  border-color: #c38728;
+  background: #fff4cf
+}
+
+.is-spinning .pointer {
+  animation: pointer-tick .16s ease-in-out infinite alternate
+}
+
+.is-spinning .wheel-center {
+  animation: hungry-nod .7s ease-in-out infinite alternate
+}
+
+.revealed h2 {
+  animation: reveal-bite .5s cubic-bezier(.2, .8, .2, 1) both
+}
+
+dialog[open] {
+  animation: dialog-arrive .2s ease-out both
+}
+
+@keyframes pointer-tick {
+  to { transform: rotate(-12deg) }
+}
+
+@keyframes hungry-nod {
+  to { transform: translate(-50%, -50%) rotate(7deg) scale(1.04) }
+}
+
+@keyframes reveal-bite {
+  0% { transform: translateY(8px) scale(.92); opacity: 0 }
+  65% { transform: translateY(-2px) scale(1.03); opacity: 1 }
+  100% { transform: translateY(0) scale(1); opacity: 1 }
+}
+
+@keyframes dialog-arrive {
+  from { transform: translateY(10px); opacity: 0 }
+  to { transform: translateY(0); opacity: 1 }
+}
+
+@media(hover:hover) {
+  .inspiration:enabled:hover {
+    transform: translateY(-2px)
+  }
+  .inspiration:enabled:hover .inspiration-icon {
+    animation: food-wiggle .35s ease-in-out
+  }
+}
+
+@keyframes food-wiggle {
+  35% { transform: rotate(-12deg) }
+  70% { transform: rotate(10deg) }
 }
 
 @media(max-width:760px) {
@@ -814,6 +953,10 @@ dialog p {
 
   .note-card {
     margin-top: 16px
+  }
+
+  .inspirations {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
   }
 }
 

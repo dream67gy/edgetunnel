@@ -88,3 +88,38 @@ async function fixture(t, mode) {
   assert.equal((await worker.fetch(new Request('https://example.test/eat'), {}, {})).status, 200);
   assert.equal((await worker.fetch(new Request('https://example.test/admin'), {}, {})).status, 404);
 });
+
+test('pool revalidation returns no menu body and new food icons survive saves', async t => {
+  const { modules } = await fixture(t, 'standalone');
+  const { eatPoolAPI } = await import(pathToFileURL(join(modules, 'api.js')));
+  let row = { revision: 3, shops: '[]', updated_at: 'today' };
+  const env = { EAT_DB: { withSession() { return { prepare(query) {
+    return {
+      args: [],
+      bind(...args) { this.args = args; return this; },
+      async first() {
+        if (query.startsWith('UPDATE')) row = { ...row, revision: row.revision + 1, shops: this.args[0] };
+        return row;
+      }
+    };
+  } }; } } };
+  const url = 'https://example.test/eat/api/pool';
+  const first = await eatPoolAPI(new Request(url), env);
+  assert.equal(first.headers.get('ETag'), '"eat-pool-3"');
+  assert.equal((await first.json()).revision, 3);
+  const unchanged = await eatPoolAPI(new Request(url, { headers: { 'If-None-Match': '"eat-pool-3"' } }), env);
+  assert.equal(unchanged.status, 304);
+  assert.equal(await unchanged.text(), '');
+  assert.equal(unchanged.headers.get('Cache-Control'), 'no-store');
+  const shops = ['🥣', '🥩', '🍝', '🍳', '🍛', '🥘', '🌮', '🥐', '🥯', '🦞'].map((emoji, i) => ({
+    id: String(i), name: '美味 ' + i, emoji, category: '随时', price: null, note: '', enabled: true
+  }));
+  const saved = await eatPoolAPI(new Request(url, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: 3, shops })
+  }), env);
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await saved.json()).shops, shops);
+  const changed = await eatPoolAPI(new Request(url, { headers: { 'If-None-Match': '"eat-pool-3"' } }), env);
+  assert.equal(changed.status, 200);
+  assert.equal(changed.headers.get('ETag'), '"eat-pool-4"');
+});

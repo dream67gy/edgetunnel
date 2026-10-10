@@ -61,6 +61,9 @@
 </div>
 <div class="filters" id="filters" aria-label="按用餐时段筛选">
 </div>
+<label class="flavor-picker">今天想吃什么口味？
+<select id="flavor-filter"><option value="">全部口味 · 都有机会</option></select>
+</label>
 <div class="cards" id="cards">
 </div>
 <div class="pool-foot">
@@ -72,6 +75,10 @@
 <button class="text-btn" id="import">↙ 导入</button>
 <input type="file" id="import-file" accept=".json,application/json" hidden>
 </div>
+</div>
+<div class="inspiration-shelf">
+<div class="inspiration-head"><h3>给胃一点新灵感</h3><span>点一道，添进你的奖池</span></div>
+<div class="inspirations" id="inspirations" aria-label="美食灵感菜单"></div>
 </div>
 <div class="note-card">
 <span>🍋</span>
@@ -129,6 +136,16 @@
 <option value="🍣">🍣 日料</option>
 <option value="🍰">🍰 甜点</option>
 <option value="🧋">🧋 饮品</option>
+<option value="🥣">🥣 稀饭 / 粥</option>
+<option value="🥩">🥩 西餐 / 牛排</option>
+<option value="🍝">🍝 意面</option>
+<option value="🍳">🍳 煎蛋 / 早午餐</option>
+<option value="🍛">🍛 咖喱 / 东南亚</option>
+<option value="🥘">🥘 韩餐 / 拌饭</option>
+<option value="🌮">🌮 墨西哥菜</option>
+<option value="🥐">🥐 可颂 / 烘焙</option>
+<option value="🥯">🥯 贝果</option>
+<option value="🦞">🦞 海鲜</option>
 </select>
 </label>
 <label class="field">小备注（可选）<input id="shop-note" maxlength="80" placeholder="例如：步行 5 分钟，记得加个蛋">

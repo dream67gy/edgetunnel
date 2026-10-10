@@ -21,6 +21,8 @@ with sync_playwright() as p:
    if data['revision']!=shared['revision']:
     route.fulfill(status=409,json={**shared,'error':'奖池刚被其他人修改'});return
    shared.update(revision=shared['revision']+1,shops=data['shops'])
+  elif route.request.headers.get('if-none-match')==f'"eat-pool-{shared["revision"]}"':
+   route.fulfill(status=304,body='');return
   route.fulfill(json=shared)
  # Verify the actual self-contained deployment HTML, not just the source preview.
  subprocess.run(['python3', str(root/'eat/build.py'), '--mode', 'standalone'], check=True)

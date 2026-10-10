@@ -31,7 +31,7 @@ with sync_playwright() as p:
  }};
  }""")
  def api(method='GET',data=None,headers=None,missing=False):
-  return backend.evaluate('''async ({method,data,headers,missing})=>{const request=new Request('https://example.com/eat/api/pool',{method,headers:headers||{'Content-Type':'application/json'},body:data===null?undefined:JSON.stringify(data)});if(headers)Object.defineProperty(request,'headers',{value:new Headers(headers)});const r=await api(request,missing?{}:env);return{status:r.status,data:await r.json()}}''',dict(method=method,data=data,headers=headers,missing=missing))
+  return backend.evaluate('''async ({method,data,headers,missing})=>{const request=new Request('https://example.com/eat/api/pool',{method,headers:headers||{'Content-Type':'application/json'},body:data===null?undefined:JSON.stringify(data)});if(headers)Object.defineProperty(request,'headers',{value:new Headers(headers)});const r=await api(request,missing?{}:env);return{status:r.status,data:r.status===304?null:await r.json(),etag:r.headers.get('ETag')}}''',dict(method=method,data=data,headers=headers,missing=missing))
  assert api(missing=True)['status']==503
  assert api('DELETE')['status']==405
  assert api()['data']['shops'] is None
@@ -45,8 +45,11 @@ with sync_playwright() as p:
  errors=[]
  def route(request_route):
   request=request_route.request
-  result=api(request.method,json.loads(request.post_data) if request.post_data else None)
-  request_route.fulfill(status=result['status'],json=result['data'])
+  headers={'Content-Type':'application/json'}
+  if request.headers.get('if-none-match'):headers['If-None-Match']=request.headers['if-none-match']
+  result=api(request.method,json.loads(request.post_data) if request.post_data else None,headers)
+  if result['status']==304:request_route.fulfill(status=304,headers={'ETag':result['etag']},body='')
+  else:request_route.fulfill(status=result['status'],json=result['data'])
  for context in [a,b]:context.route('**/eat/api/pool',route)
  phone=a.new_page();desktop=b.new_page()
  for page in [phone,desktop]:page.on('pageerror',lambda error:errors.append(str(error)));page.goto(url);expect(page.locator('#save-status')).to_contain_text('已同步')

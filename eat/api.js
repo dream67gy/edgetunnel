@@ -22,7 +22,7 @@ function eatPoolData(row) {
 }
 
 function eatValidateShops(shops) {
-  const icons = ['🍜', '🍚', '🥟', '🍲', '🍔', '🍕', '🥗', '🍢', '🥪', '🍣', '🍰', '🧋'];
+  const icons = ['🍜', '🍚', '🥟', '🍲', '🍔', '🍕', '🥗', '🍢', '🥪', '🍣', '🍰', '🧋', '🥣', '🥩', '🍝', '🍳', '🍛', '🥘', '🌮', '🥐', '🥯', '🦞'];
   const ids = new Set();
   if (!Array.isArray(shops) || shops.length > 100) throw new Error('奖池最多 100 家店');
   return shops.map(s => {
@@ -116,7 +116,16 @@ export async function eatPoolAPI(request, env) {
   }
   try {
     const db = env.EAT_DB.withSession('first-primary');
-    if (request.method === 'GET') return json(eatPoolData(await db.prepare(EAT_POOL_SELECT).first()));
+    if (request.method === 'GET') {
+      const data = eatPoolData(await db.prepare(EAT_POOL_SELECT).first());
+      const etag = `"eat-pool-${data.revision}"`;
+      // Always check D1 for freshness; only skip sending an unchanged menu body.
+      if (request.headers.get('If-None-Match') === etag) return new Response(null, {
+        status: 304,
+        headers: { 'ETag': etag, 'Cache-Control': 'no-store' }
+      });
+      return json(data, 200, { 'ETag': etag })
+    }
     const now = new Date().toISOString(),
       encoded = JSON.stringify(body.shops);
     const row = body.revision === 0 ?

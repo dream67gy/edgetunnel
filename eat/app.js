@@ -2,18 +2,47 @@
 const $ = id => document.getElementById(id),
   KEY = 'lunch-club:v1',
   categories = ['全部', '早餐', '午餐', '晚餐', '夜宵'],
-  emojis = ['🍜', '🍚', '🥟', '🍲', '🍔', '🍕', '🥗', '🍢', '🥪', '🍣', '🍰', '🧋'];
+  emojis = ['🍜', '🍚', '🥟', '🍲', '🍔', '🍕', '🥗', '🍢', '🥪', '🍣', '🍰', '🧋', '🥣', '🥩', '🍝', '🍳', '🍛', '🥘', '🌮', '🥐', '🥯', '🦞'],
+  flavors = [
+    { name: '西餐', icons: ['🥩', '🍝', '🍔', '🍕'] },
+    { name: '粥 / 早餐', icons: ['🥣', '🍳', '🥪', '🥐', '🥯'] },
+    { name: '中式家常', icons: ['🍜', '🍚', '🥟'] },
+    { name: '火锅 / 烧烤', icons: ['🍲', '🍢'] },
+    { name: '亚洲风味', icons: ['🍣', '🍛', '🥘'] },
+    { name: '轻食', icons: ['🥗'] },
+    { name: '墨西哥菜', icons: ['🌮'] },
+    { name: '海鲜', icons: ['🦞'] },
+    { name: '甜点 / 饮品', icons: ['🍰', '🧋'] }
+  ],
+  inspirations = [
+    { name: '暖胃稀饭', emoji: '🥣', category: '早餐', note: '白粥、小米粥或皮蛋瘦肉粥，配点小菜' },
+    { name: '西餐牛排', emoji: '🥩', category: '晚餐', note: '牛排配土豆泥，今天吃得有仪式感' },
+    { name: '意式面馆', emoji: '🍝', category: '随时', note: '番茄肉酱面或奶油蘑菇面' },
+    { name: '早茶点心', emoji: '🥟', category: '早餐', note: '虾饺、烧卖、肠粉，慢慢吃一顿' },
+    { name: '日式咖喱饭', emoji: '🍛', category: '午餐', note: '热乎乎的咖喱，记得加个蛋' },
+    { name: '韩式拌饭', emoji: '🥘', category: '随时', note: '石锅拌饭、泡菜汤，也可以来份部队锅' },
+    { name: '墨西哥塔可', emoji: '🌮', category: '随时', note: '玉米饼裹上肉和蔬菜，来点新鲜口味' },
+    { name: '法式可颂', emoji: '🥐', category: '早餐', note: '酥酥的可颂搭一杯咖啡' },
+    { name: '海鲜小馆', emoji: '🦞', category: '晚餐', note: '清蒸鱼、鲜虾或海鲜煲' },
+    { name: '蔬菜轻食碗', emoji: '🥗', category: '午餐', note: '蔬菜、谷物和蛋白质，都来一点' },
+    { name: '深夜烤串', emoji: '🍢', category: '夜宵', note: '和饭搭子一起吃点热乎的' },
+    { name: '热汤面馆', emoji: '🍜', category: '随时', note: '牛肉面、乌冬面或一碗馄饨面' }
+  ];
 let state = {
     version: 1,
     shops: [],
     history: []
   },
   filter = '全部',
+  flavor = '',
   spinning = false,
   angle = 0,
   editing = null,
   toastTimer, confirmAction = null,
-  storageBlocked = false;
+  storageBlocked = false,
+  syncController = null,
+  cardsKey = null, wheelKey = null, historyKey = null,
+  celebrationTimer;
 
 function toast(message) {
   $('toast').textContent = message;
@@ -92,29 +121,37 @@ function persist() {
 function cloudStatus(message) {
   $('save-status').textContent = message
 }
-async function cloudRequest(method = 'GET', body) {
-  const response = await fetch('/eat/api/pool', {
-    method,
-    cache: 'no-store',
-    headers: body ? {
-      'Content-Type': 'application/json'
-    } : {},
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(12000)
-  });
-  let data;
+async function cloudRequest(method = 'GET', body, controller) {
+  controller ||= new AbortController();
+  const timeout = setTimeout(() => controller.abort(new DOMException('共享连接超时，请稍后重试', 'TimeoutError')), 12000);
   try {
-    data = await response.json()
-  } catch {
-    throw Error('共享服务尚未启用，请完成数据库部署')
+    const response = await fetch('/eat/api/pool', {
+      method,
+      cache: 'no-store',
+      headers: body ? {
+        'Content-Type': 'application/json'
+      } : cloudReady ? { 'If-None-Match': `"eat-pool-${revision}"` } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    });
+    if (response.status === 304 && method === 'GET') return null;
+    let data;
+    try {
+      data = await response.json()
+    } catch {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      throw Error('共享服务尚未启用，请完成数据库部署')
+    }
+    if (!response.ok) {
+      const error = Error(data.error || '同步失败，请稍后重试');
+      error.data = data;
+      error.status = response.status;
+      throw error
+    }
+    return data
+  } finally {
+    clearTimeout(timeout)
   }
-  if (!response.ok) {
-    const error = Error(data.error || '同步失败，请稍后重试');
-    error.data = data;
-    error.status = response.status;
-    throw error
-  }
-  return data
 }
 
 function applyCloud(data) {
@@ -133,10 +170,14 @@ function applyCloud(data) {
 async function syncPool(manual = false) {
   if (syncing || saving || spinning || $('editor').open || $('confirm-dialog').open) return;
   syncing = true;
+  const controller = new AbortController();
+  syncController = controller;
   render();
   try {
-    const data = await cloudRequest();
-    const changed = !cloudReady || data.revision !== revision;
+    const data = await cloudRequest('GET', undefined, controller);
+    // An edit or spin may start while a background request is still in flight.
+    if (controller.signal.aborted || saving || spinning || $('editor').open || $('confirm-dialog').open) return;
+    const changed = data && (!cloudReady || data.revision !== revision);
     if (changed) {
       applyCloud(data);
       resetResult();
@@ -145,18 +186,25 @@ async function syncPool(manual = false) {
     cloudStatus('云端共用 · 已同步');
     if (manual) toast('共享奖池已更新')
   } catch (error) {
+    if (controller.signal.aborted && controller.signal.reason?.name !== 'TimeoutError') return;
     cloudStatus(cloudReady ? '同步暂断 · 点击同步重试' : '共享未连接 · 点击同步重试');
     if (manual) toast(error.message)
   } finally {
-    syncing = false;
-    render()
+    if (syncController === controller) {
+      syncController = null;
+      syncing = false;
+      render()
+    }
   }
 }
 async function saveShops(shops) {
-  if (saving || syncing || !cloudReady) {
+  if (saving || !cloudReady) {
     toast('请先连接共享奖池');
     return false
   }
+  syncController?.abort();
+  syncController = null;
+  syncing = false;
   saving = true;
   cloudStatus('正在保存到云端…');
   render();
@@ -195,7 +243,12 @@ $('migrate').onclick = () => confirm('共享这台设备原来的菜单？', '�
 });
 
 function eligible() {
-  return state.shops.filter(s => s.enabled && (filter === '全部' || s.category === '随时' || s.category === filter))
+  return state.shops.filter(s => s.enabled && matchesFilters(s))
+}
+
+function matchesFilters(shop) {
+  return (filter === '全部' || shop.category === '随时' || shop.category === filter) &&
+    (!flavor || flavors.find(f => f.name === flavor)?.icons.includes(shop.emoji))
 }
 
 function element(tag, className, text) {
@@ -207,22 +260,26 @@ function element(tag, className, text) {
 
 function render() {
   const list = eligible();
+  const locked = spinning || saving || !cloudReady;
+  const spinLabel = spinning ? '命运正在下单…' : !list.length ? '换个筛选或添加美味' :
+    document.querySelector('.result').classList.contains('revealed') ? '再抽一次' : '帮我决定！';
   $('total-count').textContent = state.shops.length + ' 家';
   $('eligible-count').textContent = list.length + ' 家待翻牌';
-  $('spin').disabled = spinning || saving || syncing || !list.length;
-  $('spin-label').textContent = spinning ? '命运正在下单…' : list.length ? '帮我决定！' : '先添加或启用一家店';
-  $('add').disabled = spinning || saving || !cloudReady || syncing;
-  $('import').disabled = spinning || saving || !cloudReady || syncing;
-  $('migrate').disabled = spinning || saving || !cloudReady || syncing;
+  $('spin').disabled = spinning || saving || !list.length;
+  $('spin-label').textContent = spinLabel;
+  $('add').disabled = locked;
+  $('import').disabled = locked;
+  $('migrate').disabled = locked;
   $('sync-now').disabled = spinning || saving || syncing;
   $('shop-form').querySelector('button[type=submit]').disabled = saving;
   $('delete-shop').disabled = saving;
   $('clear-history').disabled = spinning || !state.history.length;
-  $('filters').replaceChildren();
-  categories.forEach(c => {
+  $('flavor-filter').disabled = spinning || saving;
+  $('flavor-filter').value = flavor;
+  $('inspirations').querySelectorAll('button').forEach(b => b.disabled = locked);
+  if (!$('filters').childElementCount) categories.forEach(c => {
     const b = element('button', 'chip' + (filter === c ? ' active' : ''), c);
     b.setAttribute('aria-pressed', String(filter === c));
-    b.disabled = spinning;
     b.onclick = () => {
       filter = c;
       resetResult();
@@ -230,49 +287,65 @@ function render() {
     };
     $('filters').append(b)
   });
-  $('cards').replaceChildren();
-  const shown = state.shops.filter(s => filter === '全部' || s.category === '随时' || s.category === filter);
-  if (!shown.length) $('cards').append(element('div', 'empty', '这里还没有店铺，添加一家喜欢的小店吧。'));
-  shown.forEach(s => {
-    const row = element('div', 'shop' + (s.enabled ? '' : ' off'));
-    row.append(element('div', 'food-icon', s.emoji));
-    const copy = element('div', 'shop-copy');
-    copy.append(element('div', 'shop-name', s.name), element('div', 'shop-meta', [s.category, s.price === null ? '预算随心' : '¥' + s.price + ' / 人', s.note].filter(Boolean).join(' · ')));
-    row.append(copy);
-    const edit = element('button', 'icon-btn', '✎');
-    edit.setAttribute('aria-label', '编辑 ' + s.name);
-    edit.disabled = spinning || saving || !cloudReady || syncing;
-    edit.onclick = () => openEditor(s);
-    row.append(edit);
-    const label = element('label', 'toggle'),
-      input = element('input');
-    input.type = 'checkbox';
-    input.checked = s.enabled;
-    input.disabled = spinning || saving || !cloudReady || syncing;
-    input.setAttribute('aria-label', '让 ' + s.name + ' 参与抽奖');
-    input.onchange = async () => {
-      const enabled = input.checked;
-      input.checked = s.enabled;
-      await saveShops(state.shops.map(x => x.id === s.id ? {
-        ...x,
-        enabled
-      } : x))
-    };
-    label.append(input, element('span'));
-    row.append(label);
-    $('cards').append(row)
+  $('filters').querySelectorAll('button').forEach(b => {
+    b.disabled = spinning || saving;
+    b.classList.toggle('active', b.textContent === filter);
+    b.setAttribute('aria-pressed', String(b.textContent === filter))
   });
+  const nextCardsKey = JSON.stringify([filter, flavor, state.shops]);
+  if (nextCardsKey !== cardsKey) {
+    cardsKey = nextCardsKey;
+    const fragment = document.createDocumentFragment();
+    const shown = state.shops.filter(matchesFilters);
+    $('cards').classList.toggle('large-pool', shown.length > 30);
+    if (!shown.length) fragment.append(element('div', 'empty', state.shops.length ? '这个口味还没有店铺，换个筛选或从下方灵感里加一道吧。' : '这里还没有店铺，从下方灵感菜单开始吧。'));
+    shown.forEach(s => {
+      const row = element('div', 'shop' + (s.enabled ? '' : ' off'));
+      row.dataset.id = s.id;
+      row.append(element('div', 'food-icon', s.emoji));
+      const copy = element('div', 'shop-copy');
+      copy.append(element('div', 'shop-name', s.name), element('div', 'shop-meta', [s.category, s.price === null ? '预算随心' : '¥' + s.price + ' / 人', s.note].filter(Boolean).join(' · ')));
+      row.append(copy);
+      const edit = element('button', 'icon-btn', '✎');
+      edit.setAttribute('aria-label', '编辑 ' + s.name);
+      edit.onclick = () => openEditor(s);
+      row.append(edit);
+      const label = element('label', 'toggle'),
+        input = element('input');
+      input.type = 'checkbox';
+      input.checked = s.enabled;
+      input.setAttribute('aria-label', '让 ' + s.name + ' 参与抽奖');
+      input.onchange = async () => {
+        const enabled = input.checked;
+        input.checked = s.enabled;
+        await saveShops(state.shops.map(x => x.id === s.id ? {
+          ...x,
+          enabled
+        } : x))
+      };
+      label.append(input, element('span'));
+      row.append(label);
+      fragment.append(row)
+    });
+    $('cards').replaceChildren(fragment)
+  }
+  $('cards').querySelectorAll('button, input').forEach(control => control.disabled = locked);
   drawWheel(list);
   renderHistory()
 }
 
 function resetResult() {
+  document.querySelector('.result').classList.remove('revealed');
+  $('cards').querySelectorAll('.winner').forEach(row => row.classList.remove('winner'));
   $('result-caption').textContent = '胃已经准备好了，运气呢？';
   $('result-title').textContent = '下一顿，会是谁？';
   $('result-detail').textContent = '每家入选店铺，都有同样的机会'
 }
 
 function drawWheel(list) {
+  const nextKey = JSON.stringify(list.map(s => [s.id, s.name, s.emoji]));
+  if (nextKey === wheelKey) return;
+  wheelKey = nextKey;
   const ns = 'http://www.w3.org/2000/svg',
     svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 360 360');
@@ -296,7 +369,7 @@ function drawWheel(list) {
     path.setAttribute('stroke', '#fff8e8');
     path.setAttribute('stroke-width', '1.5');
     svg.append(path);
-    if (list.length) {
+    if (list.length && (n <= 36 || i % Math.ceil(n / 36) === 0)) {
       const t = document.createElementNS(ns, 'text');
       t.setAttribute('transform', `translate(180 180) rotate(${(i+.5)*360/n-90})`);
       t.setAttribute('x', '112');
@@ -313,6 +386,9 @@ function drawWheel(list) {
 }
 
 function renderHistory() {
+  const nextKey = JSON.stringify(state.history);
+  if (nextKey === historyKey) return;
+  historyKey = nextKey;
   $('history').replaceChildren();
   if (!state.history.length) {
     $('history').append(element('p', 'empty', '还没有抽奖记录，今天的第一份惊喜正在等你。'));
@@ -341,21 +417,31 @@ function randomIndex(n) {
 }
 $('spin').onclick = () => {
   const list = eligible();
-  if (spinning || saving || syncing || !list.length) return;
+  if (spinning || saving || !list.length) return;
   const index = randomIndex(list.length),
     winner = {
       ...list[index]
     };
   spinning = true;
+  resetResult();
+  document.querySelector('.lottery').classList.add('is-spinning');
+  $('wheel').style.willChange = 'transform';
   render();
   $('result-caption').textContent = '别急，美味正在赶来的路上';
   $('result-title').textContent = '今天的饭搭子是…';
   $('result-detail').textContent = '转一转，把纠结留在上一餐';
   const target = (360 - (index + .5) * 360 / list.length) % 360;
   angle += 360 * 5 + ((target - angle % 360 + 360) % 360);
-  $('wheel').style.transform = `rotate(${angle}deg)`;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  setTimeout(() => {
+  let finished = false;
+  let fallback;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(fallback);
+    $('wheel').removeEventListener('transitionend', onEnd);
+    $('wheel').style.willChange = '';
+    document.querySelector('.lottery').classList.remove('is-spinning');
     spinning = false;
     state.history.unshift({
       name: winner.name,
@@ -369,26 +455,43 @@ $('spin').onclick = () => {
     $('result-title').textContent = winner.emoji + ' ' + winner.name;
     $('result-detail').textContent = [winner.price === null ? '' : `人均 ¥${winner.price}`, winner.note || '就从这顿饭，开启好心情。'].filter(Boolean).join(' · ');
     $('spin-label').textContent = '再抽一次';
+    document.querySelector('.result').classList.add('revealed');
+    const row = [...$('cards').children].find(row => row.dataset.id === winner.id);
+    row?.classList.add('winner');
     if (!reduced) celebrate()
-  }, reduced ? 80 : 4700)
+  };
+  const onEnd = event => {
+    if (event.target === $('wheel') && event.propertyName === 'transform') finish()
+  };
+  $('wheel').addEventListener('transitionend', onEnd);
+  // Give the browser a frame to promote the wheel before starting the transition.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    $('wheel').style.transform = `rotate(${angle}deg)`;
+    fallback = setTimeout(finish, reduced ? 80 : 4200)
+  }))
 };
 
 function celebrate() {
   const box = $('confetti');
+  clearTimeout(celebrationTimer);
   box.replaceChildren();
-  for (let i = 0; i < 45; i++) {
+  const fragment = document.createDocumentFragment();
+  const count = innerWidth < 760 ? 16 : 28;
+  for (let i = 0; i < count; i++) {
     const p = element('i');
     p.style.left = Math.random() * 100 + '%';
     p.style.background = ['#d95135', '#f5cb64', '#91a986', '#e9ad95'][i % 4];
     p.style.animationDelay = Math.random() * .5 + 's';
-    p.style.transform = `rotate(${Math.random()*180}deg)`;
-    box.append(p)
+    p.style.setProperty('--drift', `${Math.random() * 160 - 80}px`);
+    p.style.setProperty('--twist', `${Math.random() * 360 + 360}deg`);
+    fragment.append(p)
   }
-  setTimeout(() => box.replaceChildren(), 3300)
+  box.append(fragment);
+  celebrationTimer = setTimeout(() => box.replaceChildren(), 3300)
 }
 
 function openEditor(shop) {
-  if (spinning || saving || syncing || !cloudReady) return;
+  if (spinning || saving || !cloudReady) return;
   if (!shop && state.shops.length >= 100) {
     toast('奖池最多放 100 家店，先整理一下吧');
     return
@@ -408,6 +511,30 @@ function openEditor(shop) {
   $('shop-name').focus()
 }
 $('add').onclick = () => openEditor();
+flavors.forEach(f => {
+  const option = element('option', '', f.name);
+  option.value = f.name;
+  $('flavor-filter').append(option)
+});
+$('flavor-filter').onchange = () => {
+  flavor = $('flavor-filter').value;
+  resetResult();
+  render()
+};
+inspirations.forEach(s => {
+  const button = element('button', 'inspiration');
+  button.type = 'button';
+  button.append(element('span', 'inspiration-icon', s.emoji), element('span', '', s.name), element('span', 'inspiration-plus', '＋'));
+  button.onclick = () => {
+    openEditor();
+    if (!$('editor').open) return;
+    $('shop-name').value = s.name;
+    $('shop-emoji').value = s.emoji;
+    $('shop-category').value = s.category;
+    $('shop-note').value = s.note
+  };
+  $('inspirations').append(button)
+});
 $('close-editor').onclick = $('cancel-editor').onclick = () => $('editor').close();
 $('shop-form').onsubmit = async e => {
   e.preventDefault();
@@ -435,7 +562,10 @@ $('shop-form').onsubmit = async e => {
   const saved = await saveShops(proposed);
   if (saved) {
     $('editor').close();
-    if (filter !== '全部' && shop.category !== '随时' && shop.category !== filter) filter = '全部';
+    if (!matchesFilters(shop)) {
+      filter = '全部';
+      flavor = ''
+    }
     render();
     toast('已共享，其他设备会自动更新！')
   }
@@ -498,6 +628,7 @@ $('import-file').onchange = async e => {
       if (await saveShops(incoming.shops)) {
         state.history = incoming.history;
         filter = '全部';
+        flavor = '';
         persist();
         render();
         toast('导入成功，共享菜单已更新')
