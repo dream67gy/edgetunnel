@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f3e9">
+<title>饭点事务所 · 今天吃什么</title>
+<link rel="stylesheet" href="/eat/styles.css">
+</head>
+<body>
+<header>
+<div class="brand">
+<span class="brand-icon">食</span>饭点事务所<span class="edition">THE LUNCH CLUB</span>
+</div>
+<span class="local-pill" id="save-status">正在连接共享奖池</span>
+</header>
+<main>
+<section class="intro">
+<div>
+<div class="eyebrow">LESS THINKING, MORE EATING.</div>
+<h1>把纠结，<span>交给饭点。</span>
+</h1>
+<p>把想吃的店放进来，剩下的交给一点点运气。<br>今天也要认真吃饭呀。</p>
+</div>
+<div class="doodle">人生大事<b>好好吃饭</b>EST. TODAY ✦</div>
+</section>
+<div class="layout">
+<section class="lottery" aria-label="抽奖转盘">
+<div class="panel-top">
+<span class="tiny">TODAY'S LUCKY BITE</span>
+<span class="live-count" id="eligible-count">
+</span>
+</div>
+<div class="wheel-area">
+<div class="pointer">
+</div>
+<div class="wheel-shell">
+<div class="wheel" id="wheel">
+</div>
+</div>
+<div class="wheel-center">吃点<br>好的！</div>
+</div>
+<div class="result" aria-live="polite">
+<span class="caption" id="result-caption">胃已经准备好了，运气呢？</span>
+<h2 id="result-title">下一顿，会是谁？</h2>
+<p id="result-detail">每家入选店铺，都有同样的机会</p>
+</div>
+<button class="primary spin-button" id="spin">
+<span>✦</span>
+<span id="spin-label">帮我决定！</span>
+<span>↗</span>
+</button>
+<p class="hint">结果仅供灵感，想吃什么，你说了算。</p>
+</section>
+<section class="pool" aria-label="我的奖池">
+<div class="pool-head">
+<h2>大家的美味奖池<small id="total-count">
+</small>
+</h2>
+<button class="add-button" id="add">＋ 添加店铺</button>
+</div>
+<div class="filters" id="filters" aria-label="按用餐时段筛选">
+</div>
+<div class="cards" id="cards">
+</div>
+<div class="pool-foot">
+<span class="pool-note">打开店铺开关，让它加入这次抽奖</span>
+<div class="backup">
+<button class="text-btn" id="sync-now">↻ 同步</button>
+<button class="text-btn" id="migrate" hidden>共享本机菜单</button>
+<button class="text-btn" id="export">↗ 导出备份</button>
+<button class="text-btn" id="import">↙ 导入</button>
+<input type="file" id="import-file" accept=".json,application/json" hidden>
+</div>
+</div>
+<div class="note-card">
+<span>🍋</span>
+<div>
+<b>给选择困难症，放个小假。</b>
+<p>添加你家楼下的宝藏小店，一起分享美味。<br>奖池云端共用，所有人都能修改。手机和电脑自动同步。</p>
+</div>
+</div>
+</section>
+</div>
+<section class="history">
+<div class="history-head">
+<h3>↺ 最近的饭点灵感</h3>
+<button class="text-btn" id="clear-history">清空记录</button>
+</div>
+<div class="history-list" id="history">
+</div>
+</section>
+</main>
+<footer>
+<span>饭点事务所 · 专治「随便，都行，你定」</span>
+<span>用一点随机，遇见一餐小确幸 ✳</span>
+</footer>
+<dialog id="editor">
+<form id="shop-form">
+<div class="dialog-head">
+<h2 id="editor-title">添一家心动小店</h2>
+<button type="button" class="icon-btn" id="close-editor" aria-label="关闭">✕</button>
+</div>
+<p>给下一顿饭，多一个值得期待的选择。</p>
+<label class="field">店铺名称<input id="shop-name" required maxlength="32" placeholder="例如：巷口的那家牛肉面" autocomplete="off">
+</label>
+<div class="form-row">
+<label class="field">吃饭时段<select id="shop-category">
+<option>随时</option>
+<option>早餐</option>
+<option>午餐</option>
+<option>晚餐</option>
+<option>夜宵</option>
+</select>
+</label>
+<label class="field">人均预算（元，可选）<input id="shop-price" type="number" min="0" max="9999" step="1" placeholder="25">
+</label>
+</div>
+<label class="field">美味标记<select id="shop-emoji">
+<option value="🍜">🍜 面食</option>
+<option value="🍚">🍚 米饭</option>
+<option value="🥟">🥟 饺子</option>
+<option value="🍲">🍲 火锅 / 汤锅</option>
+<option value="🍔">🍔 汉堡</option>
+<option value="🍕">🍕 披萨</option>
+<option value="🥗">🥗 轻食</option>
+<option value="🍢">🍢 烧烤</option>
+<option value="🥪">🥪 早餐</option>
+<option value="🍣">🍣 日料</option>
+<option value="🍰">🍰 甜点</option>
+<option value="🧋">🧋 饮品</option>
+</select>
+</label>
+<label class="field">小备注（可选）<input id="shop-note" maxlength="80" placeholder="例如：步行 5 分钟，记得加个蛋">
+</label>
+<div class="dialog-actions">
+<button type="button" class="soft-btn danger" id="delete-shop" hidden>删除店铺</button>
+<button type="button" class="soft-btn" id="cancel-editor">取消</button>
+<button class="primary" type="submit">保存到奖池</button>
+</div>
+</form>
+</dialog>
+<dialog id="confirm-dialog">
+<h2 id="confirm-title">
+</h2>
+<p id="confirm-description">
+</p>
+<div class="dialog-actions">
+<button class="soft-btn" id="confirm-cancel">取消</button>
+<button class="primary" id="confirm-ok">确定</button>
+</div>
+</dialog>
+<div class="toast" id="toast" role="status" hidden>
+</div>
+<div class="confetti" id="confetti" aria-hidden="true">
+</div>
+<script src="/eat/app.js"></script>
+</body>
+</html>
