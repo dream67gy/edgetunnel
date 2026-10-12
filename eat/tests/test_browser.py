@@ -27,7 +27,7 @@ with sync_playwright() as p:
  # Verify the actual self-contained deployment HTML, not just the source preview.
  subprocess.run(['python3', str(root/'eat/build.py'), '--mode', 'standalone'], check=True)
  module=(root/'dist/standalone/_worker.js/page.js').read_text()
- html=json.loads(module.removeprefix('export const EAT_HTML = ').removesuffix(';\n'))
+ html=json.loads(module.splitlines()[0].removeprefix('export const EAT_HTML = ').removesuffix(';'))
  assert '/eat/styles.css' not in html and '<script src="/eat/app.js">' not in html
  page.route('**/eat/',lambda route:route.fulfill(content_type='text/html',body=html))
  page.route('**/eat/api/pool',cloud)
@@ -54,7 +54,9 @@ with sync_playwright() as p:
   page.locator('#add').click();assert page.locator('#editor').is_visible()
   assert page.locator('#editor').bounding_box()['width']<=width
   page.locator('#cancel-editor').click()
- page.set_viewport_size({'width':390,'height':844});page.screenshot(path='/tmp/eat-mobile.png',full_page=True)
+ page.set_viewport_size({'width':390,'height':844})
+ page.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+ page.screenshot(path='/tmp/eat-mobile.png',full_page=True)
  # Local cache quota failure must not prevent an acknowledged cloud save.
  page.evaluate("() => { Storage.prototype.setItem=function(){throw new DOMException('quota','QuotaExceededError')}; }")
  page.locator('#add').click();page.locator('#shop-name').fill('保存异常测试');page.locator('#shop-form button[type=submit]').click();page.wait_for_function('!saving')

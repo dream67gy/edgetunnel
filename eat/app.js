@@ -21,6 +21,9 @@ let state = {
   },
   filter = '全部',
   flavor = '',
+  budget = '',
+  query = '',
+  lastWinner = null,
   spinning = false,
   angle = 0,
   editing = null,
@@ -29,11 +32,17 @@ let state = {
   syncController = null,
   cardsKey = null, wheelKey = null, historyKey = null,
   celebrationTimer;
+const cardViews = new Map();
+const foodColors = ['#f6e0d3', '#f5ecd4', '#ede5d2', '#f5e2d5', '#e4e9d8', '#dfe9d8', '#f2e7cb', '#e1e9eb', '#efe0e7'];
 
 function toast(message) {
   $('toast').textContent = message;
   $('toast').hidden = false;
   clearTimeout(toastTimer);
+  if ($('editor').open) {
+    $('editor-message').textContent = message;
+    $('editor-message').hidden = false
+  }
   toastTimer = setTimeout(() => $('toast').hidden = true, 4200)
 }
 
@@ -104,8 +113,13 @@ function persist() {
   }
 }
 
-function cloudStatus(message) {
-  $('save-status').textContent = message
+function cloudStatus(message, status = 'ok') {
+  setText($('save-status'), message);
+  $('save-status').dataset.status = status;
+  $('connection-note').hidden = status !== 'error';
+  if (status === 'error') setText($('connection-note'), state.shops.length ?
+    '云端暂时未连接。你仍可抽取已缓存的菜单，修改店铺需要恢复连接。点击右上角状态可重试。' :
+    '暂时未能连接共享奖池。点击右上角状态可重试。')
 }
 async function cloudRequest(method = 'GET', body, controller) {
   controller ||= new AbortController();
@@ -173,7 +187,7 @@ async function syncPool(manual = false) {
     if (manual) toast('共享奖池已更新')
   } catch (error) {
     if (controller.signal.aborted && controller.signal.reason?.name !== 'TimeoutError') return;
-    cloudStatus(cloudReady ? '同步暂断 · 点击同步重试' : '共享未连接 · 点击同步重试');
+    cloudStatus(cloudReady ? '同步暂断 · 点击同步重试' : '共享未连接 · 点击同步重试', 'error');
     if (manual) toast(error.message)
   } finally {
     if (syncController === controller) {
@@ -188,11 +202,12 @@ async function saveShops(shops) {
     toast('请先连接共享奖池');
     return false
   }
+  const focusedControl = document.activeElement?.closest('.shop') ? document.activeElement : null;
   syncController?.abort();
   syncController = null;
   syncing = false;
   saving = true;
-  cloudStatus('正在保存到云端…');
+  cloudStatus('正在保存到云端…', 'busy');
   render();
   try {
     const data = await cloudRequest('PUT', {
@@ -206,16 +221,20 @@ async function saveShops(shops) {
   } catch (error) {
     if (error.status === 409) {
       applyCloud(error.data);
-      cloudStatus('奖池已更新 · 请重新确认修改')
-    } else cloudStatus('云端保存失败 · 请重试');
+      cloudStatus('奖池已更新 · 请重新确认修改', 'busy')
+    } else cloudStatus('云端保存失败 · 请重试', 'error');
     toast(error.message);
     return false
   } finally {
     saving = false;
-    render()
+    render();
+    if (focusedControl?.isConnected && !focusedControl.disabled && document.activeElement === document.body) {
+      focusedControl.focus({ preventScroll: true })
+    }
   }
 }
 $('sync-now').onclick = () => syncPool(true);
+$('save-status').onclick = () => syncPool(true);
 $('migrate').onclick = () => confirm('共享这台设备原来的菜单？', '将替换当前共享奖池，所有人都能看到和修改。', async () => {
   if (await saveShops(localMigration)) {
     localMigration = [];
@@ -234,7 +253,23 @@ function eligible() {
 
 function matchesFilters(shop) {
   return (filter === '全部' || shop.category === '随时' || shop.category === filter) &&
-    (!flavor || flavors.find(f => f.name === flavor)?.icons.includes(shop.emoji))
+    (!flavor || flavors.find(f => f.name === flavor)?.icons.includes(shop.emoji)) &&
+    (!budget || (shop.price !== null && shop.price <= Number(budget))) &&
+    (!query || [shop.name, shop.note, flavors.find(f => f.icons.includes(shop.emoji))?.name || ''].join(' ').toLocaleLowerCase().includes(query))
+}
+
+function hasFilters() { return filter !== '全部' || flavor || budget || query }
+
+function clearFilters() {
+  filter = '全部';
+  flavor = budget = query = '';
+  $('shop-search').value = '';
+  resetResult();
+  render()
+}
+
+function setText(node, value) {
+  if (node.textContent !== value) node.textContent = value
 }
 
 function element(tag, className, text) {
@@ -244,27 +279,117 @@ function element(tag, className, text) {
   return node
 }
 
+function createShopCard(shop) {
+  const row = element('div', 'shop');
+  row.dataset.id = shop.id;
+  const icon = element('div', 'food-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const copy = element('div', 'shop-copy');
+  const title = element('div', 'shop-title');
+  const name = element('div', 'shop-name');
+  const price = element('span', 'shop-price');
+  const meta = element('div', 'shop-meta');
+  const note = element('p', 'shop-note');
+  title.append(name, price);
+  copy.append(title, meta, note);
+  const edit = element('button', 'icon-btn', '✎');
+  edit.onclick = () => openEditor(state.shops.find(s => s.id === shop.id));
+  const label = element('label', 'toggle');
+  const input = element('input');
+  input.type = 'checkbox';
+  input.onchange = async () => {
+    const current = state.shops.find(s => s.id === shop.id);
+    if (!current) return;
+    const enabled = input.checked;
+    input.checked = current.enabled;
+    await saveShops(state.shops.map(s => s.id === shop.id ? { ...s, enabled } : s))
+  };
+  label.append(input, element('span'));
+  row.append(icon, copy, edit, label);
+  return { row, icon, name, price, meta, note, edit, input, signature: '' }
+}
+
+function renderCards(shown, list) {
+  const container = $('cards');
+  const visibleIds = new Set(shown.map(s => s.id));
+  // Remove only obsolete rows. Unchanged rows retain keyboard focus and scroll position.
+  for (const [id, view] of cardViews) {
+    if (!visibleIds.has(id)) {
+      view.row.remove();
+      cardViews.delete(id)
+    }
+  }
+  container.querySelector('.empty')?.remove();
+  if (!shown.length) {
+    const empty = element('div', 'empty');
+    empty.append(element('span', 'empty-mark', state.shops.length ? '⌕' : '◌'));
+    const connected = cloudReady || state.shops.length;
+    empty.append(element('p', '', state.shops.length ? '暂时没有符合条件的美味。' : cloudReady ? '你的下一顿，从第一家小店开始。' : syncing ? '正在找回大家的美味…' : '连接后，就能添加你的美味清单。'));
+    const action = element('button', 'soft-btn', state.shops.length ? '清除筛选，看看全部' : connected ? '＋ 添加第一家店' : '重新连接');
+    action.onclick = state.shops.length ? clearFilters : connected ? () => openEditor() : () => syncPool(true);
+    action.disabled = saving || spinning || (!connected && syncing);
+    empty.append(action);
+    container.append(empty);
+    return
+  }
+  const positions = new Map(list.map((s, i) => [s.id, i + 1]));
+  shown.forEach((shop, index) => {
+    let view = cardViews.get(shop.id);
+    if (!view) {
+      view = createShopCard(shop);
+      cardViews.set(shop.id, view)
+    }
+    const signature = JSON.stringify(shop);
+    if (signature !== view.signature) {
+      view.signature = signature;
+      const flavorIndex = flavors.findIndex(f => f.icons.includes(shop.emoji));
+      setText(view.icon, shop.emoji);
+      view.icon.style.background = foodColors[flavorIndex] || '#eee8d8';
+      setText(view.name, shop.name);
+      setText(view.price, shop.price === null ? '预算随心' : '¥' + shop.price);
+      view.price.classList.toggle('unspecified', shop.price === null);
+      setText(view.meta, [shop.category, flavors[flavorIndex]?.name].filter(Boolean).join(' · '));
+      setText(view.note, shop.note);
+      view.note.hidden = !shop.note;
+      view.row.classList.toggle('off', !shop.enabled);
+      view.edit.setAttribute('aria-label', '编辑 ' + shop.name);
+      view.input.setAttribute('aria-label', '让 ' + shop.name + ' 参与抽奖');
+      view.input.checked = shop.enabled
+    }
+    if (list.length > 20 && positions.has(shop.id)) view.icon.dataset.number = positions.get(shop.id);
+    else delete view.icon.dataset.number;
+    if (container.children[index] !== view.row) container.insertBefore(view.row, container.children[index] || null)
+  })
+}
+
 function render() {
   const list = eligible();
+  const shown = state.shops.filter(matchesFilters);
   const locked = spinning || saving || !cloudReady;
-  const spinLabel = spinning ? '命运正在下单…' : !list.length ? '换个筛选或添加美味' :
-    document.querySelector('.result').classList.contains('revealed') ? '再抽一次' : '帮我决定！';
-  $('total-count').textContent = state.shops.length + ' 家';
-  $('eligible-count').textContent = list.length + ' 家待翻牌';
+  const spinLabel = spinning ? '命运正在下单…' : !list.length ? '先选几家喜欢的店' :
+    lastWinner ? '再抽一次' : '帮我决定！';
+  setText($('total-count'), state.shops.length + ' 家');
+  setText($('eligible-count'), list.length + ' 家待选');
+  setText($('spin-label'), spinLabel);
+  setText($('filter-summary'), `${shown.length} 家符合 · ${list.length} 家参与` + (budget ? ' · 按已填预算' : ''));
+  setText($('wheel-context'), hasFilters() ? [filter !== '全部' ? filter : '', flavor, budget ? '人均 ≤ ¥' + budget : '', query ? '搜索结果' : ''].filter(Boolean).join(' / ') : '每一家，都有被选中的理由。');
   $('spin').disabled = spinning || saving || !list.length;
-  $('spin-label').textContent = spinLabel;
   $('add').disabled = locked;
   $('import').disabled = locked;
   $('migrate').disabled = locked;
   $('sync-now').disabled = spinning || saving || syncing;
-  $('shop-form').querySelector('button[type=submit]').disabled = saving;
-  $('delete-shop').disabled = saving;
+  $('save-status').disabled = spinning || saving || syncing;
+  $('shop-form').querySelectorAll('input, select, button').forEach(control => control.disabled = saving);
+  setText($('shop-form').querySelector('button[type=submit]'), saving ? '正在保存…' : '保存到奖池');
   $('clear-history').disabled = spinning || !state.history.length;
-  $('flavor-filter').disabled = spinning || saving;
+  $('flavor-filter').disabled = $('budget-filter').disabled = $('shop-search').disabled = spinning || saving;
   $('flavor-filter').value = flavor;
+  $('budget-filter').value = budget;
+  $('reset-filters').hidden = !hasFilters();
+  $('reset-filters').disabled = spinning || saving;
+  document.querySelector('.lottery').classList.toggle('is-empty', !list.length);
   if (!$('filters').childElementCount) categories.forEach(c => {
-    const b = element('button', 'chip' + (filter === c ? ' active' : ''), c);
-    b.setAttribute('aria-pressed', String(filter === c));
+    const b = element('button', 'chip', c);
     b.onclick = () => {
       filter = c;
       resetResult();
@@ -277,51 +402,19 @@ function render() {
     b.classList.toggle('active', b.textContent === filter);
     b.setAttribute('aria-pressed', String(b.textContent === filter))
   });
-  const nextCardsKey = JSON.stringify([filter, flavor, state.shops]);
+  const nextCardsKey = JSON.stringify([filter, flavor, budget, query, state.shops, cloudReady, syncing && !cloudReady]);
   if (nextCardsKey !== cardsKey) {
     cardsKey = nextCardsKey;
-    const fragment = document.createDocumentFragment();
-    const shown = state.shops.filter(matchesFilters);
-    if (!shown.length) fragment.append(element('div', 'empty', state.shops.length ? '这个口味还没有店铺，换个筛选或添加一家喜欢的小店吧。' : '这里还没有店铺，添加一家喜欢的小店吧。'));
-    shown.forEach(s => {
-      const row = element('div', 'shop' + (s.enabled ? '' : ' off'));
-      row.dataset.id = s.id;
-      const icon = element('div', 'food-icon', s.emoji);
-      const flavorIndex = flavors.findIndex(f => f.icons.includes(s.emoji));
-      icon.style.background = ['#f6e0d3', '#f5ecd4', '#ede5d2', '#f5e2d5', '#e4e9d8', '#dfe9d8', '#f2e7cb', '#e1e9eb', '#efe0e7'][flavorIndex] || '#f3ebd6';
-      row.append(icon);
-      const copy = element('div', 'shop-copy');
-      copy.append(element('div', 'shop-name', s.name), element('div', 'shop-meta', [s.category, s.price === null ? '预算随心' : '¥' + s.price + ' / 人', s.note].filter(Boolean).join(' · ')));
-      row.append(copy);
-      const edit = element('button', 'icon-btn', '✎');
-      edit.setAttribute('aria-label', '编辑 ' + s.name);
-      edit.onclick = () => openEditor(s);
-      row.append(edit);
-      const label = element('label', 'toggle'),
-        input = element('input');
-      input.type = 'checkbox';
-      input.checked = s.enabled;
-      input.setAttribute('aria-label', '让 ' + s.name + ' 参与抽奖');
-      input.onchange = async () => {
-        const enabled = input.checked;
-        input.checked = s.enabled;
-        await saveShops(state.shops.map(x => x.id === s.id ? {
-          ...x,
-          enabled
-        } : x))
-      };
-      label.append(input, element('span'));
-      row.append(label);
-      fragment.append(row)
-    });
-    $('cards').replaceChildren(fragment)
+    renderCards(shown, list)
   }
-  $('cards').querySelectorAll('button, input').forEach(control => control.disabled = locked);
+  $('cards').querySelectorAll('.shop button, .shop input').forEach(control => control.disabled = locked);
   drawWheel(list);
   renderHistory()
 }
 
 function resetResult() {
+  lastWinner = null;
+  $('result-actions').hidden = true;
   document.querySelector('.result').classList.remove('revealed');
   $('cards').querySelectorAll('.winner').forEach(row => row.classList.remove('winner'));
   $('result-caption').textContent = '胃已经准备好了，运气呢？';
@@ -382,14 +475,17 @@ function renderHistory() {
     return
   }
   state.history.slice(0, 8).forEach(h => {
-    const n = element('div', 'history-item', h.emoji + ' ' + h.name);
-    n.append(element('small', '', new Date(h.time).toLocaleString('zh-CN', {
+    const n = element('div', 'history-item');
+    const copy = element('div', 'history-copy');
+    copy.append(element('div', 'history-name', h.name));
+    copy.append(element('small', '', new Date(h.time).toLocaleString('zh-CN', {
       month: 'numeric',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
     })));
+    n.append(element('span', 'history-emoji', h.emoji), copy);
     $('history').append(n)
   })
 }
@@ -420,6 +516,8 @@ $('spin').onclick = () => {
   const target = (360 - (index + .5) * 360 / list.length) % 360;
   angle += 360 * 5 + ((target - angle % 360 + 360) % 360);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = reduced ? 0 : list.length === 1 ? 650 : 3800;
+  $('wheel').style.transitionDuration = duration + 'ms';
   let finished = false;
   let fallback;
   const finish = () => {
@@ -428,6 +526,7 @@ $('spin').onclick = () => {
     clearTimeout(fallback);
     $('wheel').removeEventListener('transitionend', onEnd);
     $('wheel').style.willChange = '';
+    $('wheel').style.transitionDuration = '';
     document.querySelector('.lottery').classList.remove('is-spinning');
     spinning = false;
     state.history.unshift({
@@ -442,6 +541,8 @@ $('spin').onclick = () => {
     $('result-title').textContent = winner.emoji + ' ' + winner.name;
     $('result-detail').textContent = [winner.price === null ? '' : `人均 ¥${winner.price}`, winner.note || '就从这顿饭，开启好心情。'].filter(Boolean).join(' · ');
     $('spin-label').textContent = '再抽一次';
+    lastWinner = winner;
+    $('result-actions').hidden = false;
     document.querySelector('.result').classList.add('revealed');
     const row = [...$('cards').children].find(row => row.dataset.id === winner.id);
     row?.classList.add('winner');
@@ -454,7 +555,7 @@ $('spin').onclick = () => {
   // Give the browser a frame to promote the wheel before starting the transition.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     $('wheel').style.transform = `rotate(${angle}deg)`;
-    fallback = setTimeout(finish, reduced ? 80 : 4200)
+    fallback = setTimeout(finish, reduced ? 80 : duration + 400)
   }))
 };
 
@@ -485,6 +586,8 @@ function openEditor(shop) {
   }
   editing = shop?.id || null;
   $('shop-form').reset();
+  $('shop-name').setCustomValidity('');
+  $('editor-message').hidden = true;
   $('editor-title').textContent = shop ? '编辑这家小店' : '添一家心动小店';
   $('delete-shop').hidden = !shop;
   if (shop) {
@@ -494,6 +597,7 @@ function openEditor(shop) {
     $('shop-note').value = shop.note;
     $('shop-emoji').value = shop.emoji
   }
+  $('editor-mark').textContent = $('shop-emoji').value;
   $('editor').showModal();
   $('shop-name').focus()
 }
@@ -508,7 +612,40 @@ $('flavor-filter').onchange = () => {
   resetResult();
   render()
 };
+$('budget-filter').onchange = () => {
+  budget = $('budget-filter').value;
+  resetResult();
+  render()
+};
+$('shop-search').oninput = () => {
+  query = $('shop-search').value.trim().toLocaleLowerCase();
+  resetResult();
+  render()
+};
+$('reset-filters').onclick = clearFilters;
+$('shop-emoji').onchange = () => $('editor-mark').textContent = $('shop-emoji').value;
+$('locate-result').onclick = () => {
+  if (!lastWinner) return;
+  cardViews.get(lastWinner.id)?.row.scrollIntoView({
+    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+    block: 'center'
+  })
+};
+$('copy-result').onclick = async () => {
+  if (!lastWinner) return;
+  const winner = lastWinner;
+  const text = ['今天吃：' + winner.emoji + ' ' + winner.name, winner.price === null ? '' : '人均 ¥' + winner.price, winner.note].filter(Boolean).join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('饭点已复制，发给你的饭搭子吧')
+  } catch {
+    toast('未能复制，请长按或选中结果文字复制')
+  }
+};
 $('close-editor').onclick = $('cancel-editor').onclick = () => $('editor').close();
+$('editor').addEventListener('cancel', event => {
+  if (saving) event.preventDefault()
+});
 $('shop-form').onsubmit = async e => {
   e.preventDefault();
   const name = $('shop-name').value.trim();
@@ -535,10 +672,7 @@ $('shop-form').onsubmit = async e => {
   const saved = await saveShops(proposed);
   if (saved) {
     $('editor').close();
-    if (!matchesFilters(shop)) {
-      filter = '全部';
-      flavor = ''
-    }
+    if (!matchesFilters(shop)) clearFilters();
     render();
     toast('已共享，其他设备会自动更新！')
   }
@@ -600,8 +734,7 @@ $('import-file').onchange = async e => {
     confirm('导入这份美味清单？', `将用备份中的 ${incoming.shops.length} 家店替换所有人的共享奖池；抽奖记录仅更新本机。建议先导出备份。`, async () => {
       if (await saveShops(incoming.shops)) {
         state.history = incoming.history;
-        filter = '全部';
-        flavor = '';
+        clearFilters();
         persist();
         render();
         toast('导入成功，共享菜单已更新')
@@ -619,5 +752,6 @@ document.addEventListener('visibilitychange', () => {
 setInterval(() => {
   if (!document.hidden) syncPool()
 }, 8000);
+$('today-date').textContent = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
 render();
 syncPool();

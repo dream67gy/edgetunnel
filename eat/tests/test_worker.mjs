@@ -5,6 +5,7 @@ import { mkdtemp, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const python = process.env.PYTHON || 'python3';
@@ -122,4 +123,27 @@ test('pool revalidation returns no menu body and new food icons survive saves', 
   const changed = await eatPoolAPI(new Request(url, { headers: { 'If-None-Match': '"eat-pool-3"' } }), env);
   assert.equal(changed.status, 200);
   assert.equal(changed.headers.get('ETag'), '"eat-pool-4"');
+});
+
+test('HTML revalidation skips unchanged content and sends the current page for stale tags', async t => {
+  const { modules } = await fixture(t, 'standalone');
+  const { default: worker } = await import(pathToFileURL(join(modules, 'index.js')));
+  const request = (headers = {}, method = 'GET') => new Request('https://example.test/eat', { headers, method });
+  const first = await worker.fetch(request(), {}, {});
+  const html = await first.text();
+  const etag = first.headers.get('ETag');
+  assert.equal(etag, '"eat-page-' + createHash('sha256').update(html).digest('hex').slice(0, 24) + '"');
+  for (const tag of [etag, `W/${etag}`, `"older", ${etag}`]) {
+    const cached = await worker.fetch(request({ 'If-None-Match': tag }), {}, {});
+    assert.equal(cached.status, 304);
+    assert.equal(await cached.text(), '');
+    assert.equal(cached.headers.get('Cache-Control'), 'no-cache');
+    assert.equal(cached.headers.get('ETag'), etag);
+  }
+  const changed = await worker.fetch(request({ 'If-None-Match': '"previous-build"' }), {}, {});
+  assert.equal(changed.status, 200);
+  assert.equal(await changed.text(), html);
+  const head = await worker.fetch(request({}, 'HEAD'), {}, {});
+  assert.equal(head.headers.get('ETag'), etag);
+  assert.equal(await head.text(), '');
 });

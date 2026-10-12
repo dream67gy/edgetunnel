@@ -4,33 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f7f3e9">
+<meta name="description" content="把纠结交给饭点。筛选口味和预算，用一点运气决定下一顿，和朋友共享你的美味奖池。">
 <title>饭点事务所 · 今天吃什么</title>
 <link rel="stylesheet" href="/eat/styles.css">
 </head>
 <body>
+<a class="skip-link" href="#main">跳到主要内容</a>
 <header>
 <div class="brand">
 <span class="brand-icon">食</span>饭点事务所<span class="edition">THE LUNCH CLUB</span>
 </div>
-<span class="local-pill" id="save-status">正在连接共享奖池</span>
+<button class="local-pill" id="save-status" data-status="busy" title="点击同步共享奖池">正在连接共享奖池</button>
 </header>
-<main>
+<main id="main">
 <section class="intro">
 <div>
-<div class="eyebrow">LESS THINKING, MORE EATING.</div>
+<div class="eyebrow">THE DAILY MENU <span>·</span> 每天都值得好好吃饭</div>
 <h1>把纠结，<span>交给饭点。</span>
 </h1>
-<p>把想吃的店放进来，剩下的交给一点点运气。<br>今天也要认真吃饭呀。</p>
+<p>选好口味，留一点惊喜。<a class="intro-link" href="#pool">先挑口味 ↘</a></p>
 </div>
-<div class="doodle">人生大事<b>好好吃饭</b>EST. TODAY ✦</div>
+<div class="intro-aside"><span class="today-date" id="today-date"></span><div class="doodle" aria-hidden="true">人生大事<b>好好吃饭</b>EST. TODAY ✦</div></div>
 </section>
+<p class="connection-note" id="connection-note" role="status" hidden></p>
 <div class="layout">
-<section class="lottery" aria-label="抽奖转盘">
+<section class="lottery" id="lottery" aria-label="抽奖转盘">
 <div class="panel-top">
-<span class="tiny">TODAY'S LUCKY BITE</span>
+<span class="tiny"><span class="section-number">01</span> 今日美味签</span>
 <span class="live-count" id="eligible-count">
 </span>
 </div>
+<p class="wheel-context" id="wheel-context">每一家，都有被选中的理由。</p>
 <div class="wheel-area">
 <div class="pointer">
 </div>
@@ -45,31 +49,45 @@
 <h2 id="result-title">下一顿，会是谁？</h2>
 <p id="result-detail">每家入选店铺，都有同样的机会</p>
 </div>
+<div class="result-actions" id="result-actions" hidden>
+<button class="text-btn" id="locate-result">查看这家 ↗</button>
+<button class="text-btn" id="copy-result">复制饭点</button>
+</div>
 <button class="primary spin-button" id="spin">
 <span>✦</span>
 <span id="spin-label">帮我决定！</span>
 <span>↗</span>
 </button>
-<p class="hint">结果仅供灵感，想吃什么，你说了算。</p>
+<div class="lottery-foot"><span class="hint">一点随机，一餐小确幸。</span><a href="#pool" class="pool-shortcut">挑挑口味 ↓</a></div>
 </section>
-<section class="pool" aria-label="我的奖池">
+<section class="pool" id="pool" aria-label="我的奖池">
 <div class="pool-head">
+<div>
+<div class="tiny pool-kicker"><span class="section-number">02</span> 收藏日常的小满足</div>
 <h2>大家的美味奖池<small id="total-count">
 </small>
 </h2>
+</div>
 <button class="add-button" id="add">＋ 添加店铺</button>
 </div>
 <div class="filter-bar">
+<label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">搜索店名、口味或备注</span><input id="shop-search" type="search" placeholder="搜店名、口味或备注…" maxlength="80" autocomplete="off"></label>
 <div class="filters" id="filters" aria-label="按用餐时段筛选">
 </div>
-<label class="flavor-picker">今天想吃什么口味？
-<select id="flavor-filter"><option value="">全部口味 · 都有机会</option></select>
+<div class="filter-selects">
+<label class="flavor-picker">口味
+<select id="flavor-filter"><option value="">全部口味</option></select>
+</label>
+<label class="flavor-picker">人均
+<select id="budget-filter"><option value="">不限预算</option><option value="25">¥25 以内</option><option value="50">¥50 以内</option><option value="100">¥100 以内</option></select>
 </label>
 </div>
-<div class="cards" id="cards">
+</div>
+<div class="list-summary"><span id="filter-summary"></span><button class="text-btn" id="reset-filters" hidden>重置筛选 ↺</button></div>
+<div class="cards" id="cards" role="region" aria-label="店铺列表" tabindex="0">
 </div>
 <div class="pool-foot">
-<span class="pool-note">打开店铺开关，让它加入这次抽奖</span>
+<span class="pool-note"><span class="mini-switch" aria-hidden="true"></span> 开启店铺，就能参与抽签</span>
 <div class="backup">
 <button class="text-btn" id="sync-now">↻ 同步</button>
 <button class="text-btn" id="migrate" hidden>共享本机菜单</button>
@@ -78,18 +96,12 @@
 <input type="file" id="import-file" accept=".json,application/json" hidden>
 </div>
 </div>
-<div class="note-card">
-<span>🍋</span>
-<div>
-<b>给选择困难症，放个小假。</b>
-<p>添加你家楼下的宝藏小店，一起分享美味。<br>奖池云端共用，所有人都能修改。手机和电脑自动同步。</p>
-</div>
-</div>
+<p class="shared-note">奖池由大家共用，修改会同步到所有设备。</p>
 </section>
 </div>
 <section class="history">
 <div class="history-head">
-<h3>↺ 最近的饭点灵感</h3>
+<div><div class="eyebrow">A LITTLE FOOD DIARY</div><h3>最近的饭点灵感 <span>只记录在这台设备</span></h3></div>
 <button class="text-btn" id="clear-history">清空记录</button>
 </div>
 <div class="history-list" id="history">
@@ -100,13 +112,14 @@
 <span>饭点事务所 · 专治「随便，都行，你定」</span>
 <span>用一点随机，遇见一餐小确幸 ✳</span>
 </footer>
-<dialog id="editor">
+<dialog id="editor" aria-labelledby="editor-title" aria-describedby="editor-description">
 <form id="shop-form">
+<div class="editor-mark" id="editor-mark" aria-hidden="true">🍜</div>
 <div class="dialog-head">
 <h2 id="editor-title">添一家心动小店</h2>
 <button type="button" class="icon-btn" id="close-editor" aria-label="关闭">✕</button>
 </div>
-<p>给下一顿饭，多一个值得期待的选择。</p>
+<p id="editor-description">给下一顿饭，多一个值得期待的选择。</p>
 <label class="field">店铺名称<input id="shop-name" required maxlength="32" placeholder="例如：巷口的那家牛肉面" autocomplete="off">
 </label>
 <div class="form-row">
@@ -148,6 +161,7 @@
 </label>
 <label class="field">小备注（可选）<input id="shop-note" maxlength="80" placeholder="例如：步行 5 分钟，记得加个蛋">
 </label>
+<p class="editor-message" id="editor-message" role="alert" hidden></p>
 <div class="dialog-actions">
 <button type="button" class="soft-btn danger" id="delete-shop" hidden>删除店铺</button>
 <button type="button" class="soft-btn" id="cancel-editor">取消</button>
@@ -155,7 +169,7 @@
 </div>
 </form>
 </dialog>
-<dialog id="confirm-dialog">
+<dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description">
 <h2 id="confirm-title">
 </h2>
 <p id="confirm-description">

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create a Pages _worker.js module directory without modifying tracked sources."""
 import argparse
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -40,7 +41,10 @@ def build(mode='combined', output=None):
     modules.mkdir(parents=True)
     for name in ['worker.js', 'api.js']:
         shutil.copyfile(APP / name, modules / name)
-    (modules / 'page.js').write_text('export const EAT_HTML = ' + json.dumps(html, ensure_ascii=False) + ';\n', encoding='utf-8')
+    etag = '"eat-page-' + hashlib.sha256(html.encode('utf-8')).hexdigest()[:24] + '"'
+    (modules / 'page.js').write_text(
+        'export const EAT_HTML = ' + json.dumps(html, ensure_ascii=False) + ';\n' +
+        'export const EAT_ETAG = ' + json.dumps(etag) + ';\n', encoding='utf-8')
     if mode == 'combined':
         shutil.copyfile(ROOT / '_worker.js', modules / 'upstream.js')
         shutil.copyfile(APP / 'combined.js', modules / 'index.js')

@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright, expect
 root = Path(__file__).resolve().parents[2]
 subprocess.run(['python3', str(root / 'eat/build.py'), '--mode', 'standalone'], check=True)
 module = (root / 'dist/standalone/_worker.js/page.js').read_text()
-html = json.loads(module.removeprefix('export const EAT_HTML = ').removesuffix(';\n'))
+html = json.loads(module.splitlines()[0].removeprefix('export const EAT_HTML = ').removesuffix(';'))
 url = 'https://eat.test/eat/'
 icons = ['🥣', '🥩', '🍝', '🍛', '🍚', '🍢', '🌮', '🦞', '🥐', '🥗']
 shared = {
@@ -102,6 +102,19 @@ with sync_playwright() as p:
     assert idle['scrollBefore'] == idle['scrollAfter'], f'List scrolled during idle sync: {idle}'
     page.evaluate('observer.disconnect()')
     cdp.send('Emulation.setCPUThrottlingRate', {'rate': 1})
+
+    # Toggling one row must preserve every row node, scroll position and keyboard focus.
+    page.evaluate("window.toggleSnapshot = {rows:[...$('cards').children], scroll:$('cards').scrollTop, focus:document.activeElement}")
+    page.keyboard.press('Space')
+    page.wait_for_function('!saving && !state.shops[30].enabled')
+    retained = page.evaluate("""() => ({
+      nodes: toggleSnapshot.rows.every((row,i) => row === $('cards').children[i]),
+      scroll: toggleSnapshot.scroll === $('cards').scrollTop,
+      focus: toggleSnapshot.focus === document.activeElement
+    })""")
+    assert all(retained.values()), retained
+    page.keyboard.press('Space')
+    page.wait_for_function('!saving && state.shops[30].enabled')
 
     # A slow background GET must not disable editing or replace a newly opened draft.
     hold = True
