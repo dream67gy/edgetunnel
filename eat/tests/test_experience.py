@@ -146,4 +146,37 @@ with sync_playwright() as p:
     assert not errors, errors
     print('PASS: search/cuisine/time/budget composition; exact winner actions; clipboard fallback; '
           'new-shop visibility; pending-save locks; inline errors; reconnect; actionable empty states')
+    # Result copy and newly available actions must never move the draw button or pool.
+    for width in (320, 390, 768, 1440):
+        layout_page = browser.new_page(viewport={'width': width, 'height': 900})
+        meal = dict(id='layout', name='巷口现熬暖胃早餐稀饭与手工点心专门店', emoji='🥣',
+                    price=12, category='随时', note='步行五分钟，记得加个蛋。' * 6, enabled=True)
+        layout_page.route('**/eat/', lambda route: route.fulfill(content_type='text/html', body=html))
+        layout_page.route('**/eat/api/pool', lambda route: route.fulfill(json={'revision': 1, 'shops': [meal]}))
+        layout_page.goto('https://eat.test/eat/')
+        layout_page.wait_for_function('cloudReady && !syncing')
+        layout_page.evaluate('''() => {
+          window.geometry = () => {
+            const root = document.querySelector('.layout').getBoundingClientRect();
+            return ['.result', '.result-actions', '#spin', '.lottery', '#pool'].flatMap(selector => {
+              const box = document.querySelector(selector).getBoundingClientRect();
+              return [box.width, box.height, box.top - root.top];
+            });
+          };
+          window.baseline = geometry(); window.samples = []; window.watchLayout = true;
+          const sample = () => { samples.push(geometry()); if (watchLayout) requestAnimationFrame(sample); };
+          requestAnimationFrame(sample);
+        }''')
+        for draw in range(2):
+            layout_page.evaluate("$('spin').click()")
+            layout_page.wait_for_function(f'!spinning && state.history.length === {draw + 1}')
+        layout_page.evaluate('resetResult()')
+        layout_page.evaluate('''() => new Promise(resolve => requestAnimationFrame(() => {
+          samples.push(geometry()); watchLayout = false; resolve();
+        }))''')
+        assert layout_page.evaluate('''samples.length > 3 && samples.every(sample =>
+          sample.every((value, index) => Math.abs(value - baseline[index]) < 1))'''), width
+        expect(layout_page.locator('#copy-result')).to_be_hidden()
+        layout_page.close()
+    print('PASS: stable result, actions, draw button and pool across idle/spinning/reveal/repeat/reset at 320/390/768/1440')
     browser.close()
