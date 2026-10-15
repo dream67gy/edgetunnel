@@ -1,6 +1,15 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const CONFIG_KEY = 'cib-draw-config-v1', HISTORY_KEY = 'cib-draw-history-v1';
+// Cropping is presentation-only: original product photos are kept intact on disk.
+const productPhotos = {
+  book: {file:'purchased-reference.png', size:[636,928], frame:[5,90,235,210]},
+  tissue: {file:'tissue.jpg', size:[800,800], frame:[130,185,535,455]},
+  bag: {file:'bag.jpg', size:[800,800], frame:[365,395,425,265]},
+  stand: {file:'stand.jpg', size:[800,800], frame:[20,195,255,340]},
+  cup: {file:'cup.jpg', size:[491,491], frame:[75,20,320,460]},
+  tote: {file:'purchased-reference.png', size:[636,928], frame:[331,662,255,255]}
+};
 const illustrations = {
   book: '<path d="M43 25 118 35 114 137 40 126Z" fill="#c8d3e8"/><path d="m40 20 76 11-4 101-76-11Z" fill="#7d99c8"/><path d="m43 24 9 1-4 96-9-1Z" fill="#5278b1"/><path d="m55 31 52 7-3 70-52-7Z" fill="#8da7d0"/><path d="m61 48 32 5m-33 6 32 5" stroke="#c8d8ef" stroke-width="2"/><path d="m56 88 37 5" stroke="#d9e4f4"/><path d="m92 127 0 14 7-4 5 6 1-14" fill="#d8b679"/><path d="m40 126 71 10" stroke="#f0f3fa" stroke-width="4"/>',
   tissue: '<path d="m30 65 66-14 39 25-68 15Z" fill="#f6e8d1"/><path d="m30 65 37 26v43l-37-25Z" fill="#cbb79a"/><path d="m67 91 68-15v42l-68 16Z" fill="#e7d5b8"/><path d="m64 69 27-6 14 7-29 6Z" fill="#ad9d88"/><path d="m73 69-8-30 15 4 8-17 13 16-4 25Z" fill="#fff"/><path d="m82 45 5 23m8-23-2 23" stroke="#e3e9f0" stroke-width="2"/><ellipse cx="99" cy="102" rx="17" ry="12" fill="#fffdf6"/><path d="m84 97-4-7m33 8 5-8" stroke="#8c7d67" stroke-width="4" stroke-linecap="round"/><circle cx="94" cy="101" r="1.5" fill="#746957"/><circle cx="104" cy="99" r="1.5" fill="#746957"/><path d="m98 105 4-1" stroke="#746957" stroke-width="2" stroke-linecap="round"/>',
@@ -19,7 +28,7 @@ const defaults = {showQuantity:true, gifts:[
   {id:'cup',name:'竹节吸管随行杯',note:'把温柔 · 装进日常',icon:'cup',quantity:1,unit:'个',enabled:true},
   {id:'tote',name:'便携折叠环保袋',note:'轻装出门 · 满载美好',icon:'tote',quantity:1,unit:'个',enabled:true}
 ]};
-let config = structuredClone(defaults), history = [], drawing = false, toastTimer;
+let config = structuredClone(defaults), history = [], drawing = false, toastTimer, photoSequence = 0;
 
 function validateConfig(value) {
   if (!value || typeof value.showQuantity !== 'boolean' || !Array.isArray(value.gifts) || value.gifts.length > 12) throw Error('礼品设置格式有误');
@@ -53,6 +62,26 @@ function art(icon) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox','0 0 160 160'); svg.setAttribute('aria-hidden','true');
   svg.innerHTML = illustrations[icon] || illustrations.gift;
+  const photo = productPhotos[icon];
+  if (photo) {
+    svg.classList.add('product-photo');
+    svg.setAttribute('viewBox',photo.frame.join(' '));
+    const clip = document.createElementNS('http://www.w3.org/2000/svg','clipPath');
+    clip.id = 'product-photo-' + ++photoSequence;
+    const bounds = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    ['x','y','width','height'].forEach((key,index) => bounds.setAttribute(key,photo.frame[index]));
+    clip.append(bounds);
+    const image = document.createElementNS('http://www.w3.org/2000/svg','image');
+    image.setAttribute('width',photo.size[0]); image.setAttribute('height',photo.size[1]);
+    image.setAttribute('href','/draw/images/' + photo.file);
+    image.setAttribute('clip-path',`url(#${clip.id})`);
+    image.addEventListener('error', () => {
+      svg.classList.remove('product-photo');
+      svg.setAttribute('viewBox','0 0 160 160');
+      svg.innerHTML = illustrations[icon] || illustrations.gift;
+    }, {once:true});
+    svg.replaceChildren(clip,image);
+  }
   return svg;
 }
 function el(tag, className, text) {
@@ -151,7 +180,8 @@ function draw() {
     if (!reduced) celebrate();
   };
   const tick = now => {
-    const progress = Math.min(1,(now-start)/duration);
+    // A frame's timestamp can slightly precede the click that schedules it.
+    const progress = Math.max(0,Math.min(1,(now-start)/duration));
     select(Math.floor((1-Math.pow(1-progress,2.5))*steps) % gifts.length);
     if (progress >= 1) finish(); else frame = requestAnimationFrame(tick);
   };
@@ -174,7 +204,7 @@ function editor(gift) {
   quantity.type = 'number'; quantity.min = '1'; quantity.max = '99'; quantity.step = '1';
   const icon = document.createElement('select'); icon.name = 'icon';
   Object.entries(iconNames).forEach(([value,text]) => { const option = el('option','',text); option.value = value; icon.append(option); }); icon.value = gift.icon;
-  fields.append(field('礼品名称',name),field('展示插画',icon),field('每份数量',quantity),field('单位',input('unit',gift.unit,6)));
+  fields.append(field('礼品名称',name),field('展示图片',icon),field('每份数量',quantity),field('单位',input('unit',gift.unit,6)));
   const note = field('一句介绍（可选）',input('note',gift.note,64)); note.className = 'editor-note';
   row.append(top,fields,note); return row;
 }

@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
 
 root = Path(__file__).resolve().parents[2]
@@ -17,11 +18,30 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={'width': 1440, 'height': 1000}, reduced_motion='reduce')
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.route('https://draw.test/**', lambda route: route.fulfill(content_type='text/html', body=html))
+    def serve(route):
+        path = urlparse(route.request.url).path
+        if path.startswith('/draw/images/'):
+            image = root / 'dist/standalone/draw/images' / Path(path).name
+            route.fulfill(path=str(image), content_type='image/png' if image.suffix == '.png' else 'image/jpeg')
+        else:
+            route.fulfill(content_type='text/html', body=html)
+    page.route('https://draw.test/**', serve)
     page.goto('https://draw.test/draw')
     expect(page.locator('.prize-card')).to_have_count(6)
+    expect(page.locator('.prize-card .product-photo')).to_have_count(6)
+    page.evaluate('''() => Promise.all([...document.querySelectorAll('.product-photo image')].map(node => {
+      const image = new Image(); image.src = node.getAttribute('href'); return image.decode();
+    }))''')
     expect(page.locator('[data-id=tissue] .prize-quantity')).to_have_text('2 包 / 份')
     page.screenshot(path=str(previews / 'draw-desktop.png'), full_page=True)
+    # The first frame can have a timestamp just before the draw event.
+    page.evaluate('''() => {
+      const original = window.requestAnimationFrame;
+      window.requestAnimationFrame = callback => {
+        window.requestAnimationFrame = original;
+        return original.call(window, () => callback(performance.now() - 100));
+      };
+    }''')
 
     # Exercise every prize through real draw events. A repeated click cannot add a second result.
     for index in range(6):
@@ -140,6 +160,12 @@ with sync_playwright() as p:
     expect(page.locator('.prize-card')).to_have_count(6)
     expect(page.locator('#toast')).to_contain_text('默认礼品')
     assert not errors, errors
+    # A failed photo falls back to its local illustration without affecting the prize.
+    page.route('**/draw/images/*', lambda route: route.abort())
+    page.reload()
+    page.wait_for_function("document.querySelectorAll('.prize-card .product-photo').length === 0")
+    expect(page.locator('.prize-card')).to_have_count(6)
+    expect(page.locator('#draw-button')).to_be_enabled()
     browser.close()
     print('PASS: all prizes match result/history; no duplicate draws; eligibility and bundles; local persistence; '
           'cancel; add/remove; safe text; empty pool; failed-save drafts; malformed storage; '

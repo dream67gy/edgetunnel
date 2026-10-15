@@ -83,7 +83,15 @@ async function fixture(t, mode) {
 
 test('draw routes serve the new page in both modes with independent cache validation', async t => {
   for (const mode of ['combined', 'standalone']) {
-    const { modules } = await fixture(t, mode);
+    const { modules, out } = await fixture(t, mode);
+    const photos = await readdir(join(out, 'draw/images'));
+    assert.equal(photos.length, 5);
+    for (const name of photos) {
+      const bytes = await readFile(join(out, 'draw/images', name));
+      assert.ok(name.includes(createHash('sha256').update(bytes).digest('hex').slice(0,12)));
+    }
+    assert.deepEqual(JSON.parse(await readFile(join(out, '_routes.json'), 'utf8')).exclude, ['/draw/images/*']);
+    assert.match(await readFile(join(out, '_headers'), 'utf8'), /immutable/);
     const { default: worker } = await import(pathToFileURL(join(modules, 'index.js')));
     for (const path of ['/draw', '/draw/']) {
       const url = 'https://example.test' + path;

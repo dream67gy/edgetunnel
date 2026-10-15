@@ -12,10 +12,10 @@ ROOT = APP.parent
 
 def build(mode='combined', output=None):
     target = Path(output).resolve() if output else ROOT / 'dist' / mode
-    # This function removes only its owned Worker directory, never an arbitrary output tree.
+    # Replace only owned build directories, never either application's source tree.
     modules = target / '_worker.js'
-    if target == ROOT or APP == target or APP in target.parents:
-        raise ValueError('Use an output directory outside the eat source directory')
+    if target == ROOT or any(target == source or source in target.parents for source in (APP, ROOT / 'draw')):
+        raise ValueError('Use an output directory outside the eat and draw source directories')
     inputs = ['worker.js', 'api.js', 'index.html', 'app.js', 'styles.css']
     if mode == 'combined':
         if not (ROOT / '_worker.js').is_file():
@@ -34,6 +34,14 @@ def build(mode='combined', output=None):
     html = html.replace(script_tag, '<script>\n' + (APP / 'app.js').read_text(encoding='utf-8') + '</script>')
     draw = ROOT / 'draw'
     draw_html = (draw / 'index.html').read_text(encoding='utf-8')
+    # Publish photos as cacheable static assets, outside the Worker bundle.
+    photo_sources = sorted((draw / 'images').glob('*'))
+    photo_names = {}
+    for photo in photo_sources:
+        if photo.suffix.lower() not in ('.jpg', '.png', '.webp'):
+            continue
+        digest = hashlib.sha256(photo.read_bytes()).hexdigest()[:12]
+        photo_names[photo.name] = f'{photo.stem}.{digest}{photo.suffix}'
     for tag, name, wrapper in [
         ('<link rel="stylesheet" href="/draw/styles.css">', 'styles.css', 'style'),
         ('<script src="/draw/app.js"></script>', 'app.js', 'script'),
@@ -42,6 +50,8 @@ def build(mode='combined', output=None):
             raise ValueError('Expected one Draw asset reference: ' + name)
         draw_html = draw_html.replace(tag, '<' + wrapper + '>\n' +
                                       (draw / name).read_text(encoding='utf-8') + '</' + wrapper + '>')
+    for original, versioned in photo_names.items():
+        draw_html = draw_html.replace("file:'" + original + "'", "file:'" + versioned + "'")
     if modules.is_symlink():
         raise ValueError('Refusing to replace a symlinked Worker directory')
     if modules.is_dir():
@@ -64,7 +74,16 @@ def build(mode='combined', output=None):
         shutil.copyfile(APP / 'combined.js', modules / 'index.js')
     else:
         (modules / 'index.js').write_text("export { default } from './worker.js';\n", encoding='utf-8')
-    (target / '_routes.json').write_text(json.dumps({'version':1, 'include':['/*'], 'exclude':[]}) + '\n')
+    photo_output = target / 'draw' / 'images'
+    if photo_output.is_symlink() or photo_output.parent.is_symlink():
+        raise ValueError('Refusing to replace symlinked photo output')
+    if photo_output.is_dir():
+        shutil.rmtree(photo_output)
+    photo_output.mkdir(parents=True, exist_ok=True)
+    for original, versioned in photo_names.items():
+        shutil.copyfile(draw / 'images' / original, photo_output / versioned)
+    (target / '_routes.json').write_text(json.dumps({'version':1, 'include':['/*'], 'exclude':['/draw/images/*']}) + '\n')
+    (target / '_headers').write_text('/draw/images/*\n  Cache-Control: public, max-age=31536000, immutable\n  X-Content-Type-Options: nosniff\n')
     # A tiny static fallback; all live requests are handled by the Worker.
     (target / '404.html').write_text('<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>\n')
     return target
