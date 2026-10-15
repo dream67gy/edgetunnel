@@ -27,6 +27,7 @@ with sync_playwright() as p:
             route.fulfill(content_type='text/html', body=html)
     page.route('https://draw.test/**', serve)
     page.goto('https://draw.test/draw')
+    page.locator('.brand-logo').evaluate('image => image.decode()')
     expect(page.locator('.prize-card')).to_have_count(6)
     expect(page.locator('.prize-card .product-photo')).to_have_count(6)
     page.evaluate('''() => Promise.all([...document.querySelectorAll('.product-photo image')].map(node => {
@@ -124,6 +125,10 @@ with sync_playwright() as p:
         page.reload()
         page.wait_for_function('document.querySelectorAll(".prize-card").length === 6')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), width
+        logo = page.locator('.brand-logo').bounding_box()
+        settings = page.locator('#open-settings').bounding_box()
+        assert abs(logo['width'] / logo['height'] - 584 / 192) < .01
+        assert logo['x'] + logo['width'] < settings['x'], width
         page.locator('#open-settings').click()
         assert page.evaluate('document.getElementById("settings").scrollWidth <= document.getElementById("settings").clientWidth'), width
         page.locator('.gift-editor').first.locator('[name=name]').fill('好礼' * 16)

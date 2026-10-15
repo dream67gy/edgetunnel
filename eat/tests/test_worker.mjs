@@ -85,7 +85,7 @@ test('draw routes serve the new page in both modes with independent cache valida
   for (const mode of ['combined', 'standalone']) {
     const { modules, out } = await fixture(t, mode);
     const photos = await readdir(join(out, 'draw/images'));
-    assert.equal(photos.length, 5);
+    assert.equal(photos.length, 6);
     for (const name of photos) {
       const bytes = await readFile(join(out, 'draw/images', name));
       assert.ok(name.includes(createHash('sha256').update(bytes).digest('hex').slice(0,12)));

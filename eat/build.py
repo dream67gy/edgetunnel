@@ -52,6 +52,7 @@ def build(mode='combined', output=None):
                                       (draw / name).read_text(encoding='utf-8') + '</' + wrapper + '>')
     for original, versioned in photo_names.items():
         draw_html = draw_html.replace("file:'" + original + "'", "file:'" + versioned + "'")
+        draw_html = draw_html.replace('/draw/images/' + original, '/draw/images/' + versioned)
     if modules.is_symlink():
         raise ValueError('Refusing to replace a symlinked Worker directory')
     if modules.is_dir():
