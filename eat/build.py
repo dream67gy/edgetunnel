@@ -44,12 +44,14 @@ def build(mode='combined', output=None):
         photo_names[photo.name] = f'{photo.stem}.{digest}{photo.suffix}'
     for tag, name, wrapper in [
         ('<link rel="stylesheet" href="/draw/styles.css">', 'styles.css', 'style'),
-        ('<script src="/draw/app.js"></script>', 'app.js', 'script'),
+        ('<script type="module" src="/draw/app.js"></script>', 'app.js', 'script'),
     ]:
         if draw_html.count(tag) != 1:
             raise ValueError('Expected one Draw asset reference: ' + name)
-        draw_html = draw_html.replace(tag, '<' + wrapper + '>\n' +
-                                      (draw / name).read_text(encoding='utf-8') + '</' + wrapper + '>')
+        content = (draw / name).read_text(encoding='utf-8')
+        if name == 'app.js':
+            content = (draw / 'model.js').read_text(encoding='utf-8').replace('export ', '') + '\n' + content.replace("import { validateDrawConfig } from './model.js';\n", '')
+        draw_html = draw_html.replace(tag, '<' + wrapper + '>\n' + content + '</' + wrapper + '>')
     for original, versioned in photo_names.items():
         draw_html = draw_html.replace("file:'" + original + "'", "file:'" + versioned + "'")
         draw_html = draw_html.replace('/draw/images/' + original, '/draw/images/' + versioned)
@@ -62,6 +64,8 @@ def build(mode='combined', output=None):
     modules.mkdir(parents=True)
     for name in ['worker.js', 'api.js']:
         shutil.copyfile(APP / name, modules / name)
+    shutil.copyfile(draw / 'api.js', modules / 'draw-api.js')
+    shutil.copyfile(draw / 'model.js', modules / 'model.js')
     etag = '"eat-page-' + hashlib.sha256(html.encode('utf-8')).hexdigest()[:24] + '"'
     (modules / 'page.js').write_text(
         'export const EAT_HTML = ' + json.dumps(html, ensure_ascii=False) + ';\n' +

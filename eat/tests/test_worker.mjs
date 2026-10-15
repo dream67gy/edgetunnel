@@ -93,6 +93,12 @@ test('draw routes serve the new page in both modes with independent cache valida
     assert.deepEqual(JSON.parse(await readFile(join(out, '_routes.json'), 'utf8')).exclude, ['/draw/images/*']);
     assert.match(await readFile(join(out, '_headers'), 'utf8'), /immutable/);
     const { default: worker } = await import(pathToFileURL(join(modules, 'index.js')));
+    const unavailable = await worker.fetch(new Request('https://example.test/draw/api/config'), {}, {});
+    assert.equal(unavailable.status, 503);
+    assert.equal((await unavailable.json()).code, 'UNAVAILABLE');
+    const noPassword = await worker.fetch(new Request('https://example.test/draw/api/auth'), {}, {});
+    assert.equal(noPassword.status, 503);
+    assert.equal((await noPassword.json()).code, 'AUTH_NOT_CONFIGURED');
     for (const path of ['/draw', '/draw/']) {
       const url = 'https://example.test' + path;
       const first = await worker.fetch(new Request(url), {}, {});

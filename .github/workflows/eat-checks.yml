@@ -48,6 +48,7 @@ jobs:
           python3 eat/tests/test_performance.py
           python3 eat/tests/test_experience.py
           python3 draw/tests/test_draw.py
+          python3 draw/tests/test_shared.py
       - uses: actions/upload-artifact@v4
         with:
           name: eat-pages-builds

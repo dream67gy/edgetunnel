@@ -5,6 +5,7 @@ import {
   EAT_HTML, EAT_ETAG
 } from './page.js';
 import { DRAW_HTML, DRAW_ETAG } from './draw-page.js';
+import { drawAPI } from './draw-api.js';
 
 // Returning null delegates the original Request, env and ctx to the host application.
 export async function handleEat(request, env) {
@@ -13,6 +14,7 @@ export async function handleEat(request, env) {
     pathname
   } = new URL(request.url);
   if (pathname === '/eat/api/pool') return eatPoolAPI(request, env);
+  if (pathname.startsWith('/draw/api/')) return drawAPI(request, env);
   const isDraw = pathname === '/draw' || pathname === '/draw/';
   if ((pathname === '/eat' || pathname === '/eat/' || isDraw) &&
     (request.method === 'GET' || request.method === 'HEAD')) {

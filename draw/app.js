@@ -1,6 +1,7 @@
+import { validateDrawConfig } from './model.js';
 'use strict';
 const $ = id => document.getElementById(id);
-const CONFIG_KEY = 'cib-draw-config-v1', HISTORY_KEY = 'cib-draw-history-v1';
+const HISTORY_KEY = 'cib-draw-history-v1';
 // Cropping is presentation-only: original product photos are kept intact on disk.
 const productPhotos = {
   book: {file:'purchased-reference.png', size:[636,928], frame:[5,90,235,210]},
@@ -20,37 +21,65 @@ const illustrations = {
   gift: '<path d="m29 72 55 22 51-26v63l-51 26-55-23Z" fill="#dcbd7f"/><path d="m84 94 51-26v63l-51 26Z" fill="#b98e4e"/><path d="m24 58 53-24 64 23-57 28Z" fill="#f5e4bb"/><path d="m24 58 60 27v20L24 79Z" fill="#e8cd99"/><path d="m84 85 57-28v21l-57 27Z" fill="#c9a56c"/><path d="m48 47 57 27v72l14-7V67L62 41Z" fill="#f9f0dc"/><path d="m111 47-57 26v71l14 6V79l57-26Z" fill="#fff5df"/><path d="M81 50C35 48 39 6 61 20c14 9 20 30 20 30Z" fill="#f8e7c3" stroke="#d0ab6d" stroke-width="2"/><path d="M82 50c4-42 35-49 36-28 1 19-36 28-36 28Z" fill="#ffefd0" stroke="#d0ab6d" stroke-width="2"/><ellipse cx="82" cy="49" rx="9" ry="7" fill="#e7c386"/>'
 };
 const iconNames = {book:'计划本', tissue:'抽纸', bag:'垃圾袋', stand:'手机支架', cup:'随行杯', tote:'环保袋', gift:'礼盒'};
-const defaults = {showQuantity:true, gifts:[
-  {id:'book',name:'A5 软皮计划本',note:'梦瑾 · 记录每一份灵感',icon:'book',quantity:1,unit:'本',enabled:true},
-  {id:'tissue',name:'维达联名抽纸',note:'线条小狗 · 柔软好心情',icon:'tissue',quantity:2,unit:'包',enabled:true},
-  {id:'bag',name:'山茶花抽绳垃圾袋',note:'加厚免撕 · 让家更整洁',icon:'bag',quantity:1,unit:'份',enabled:true},
-  {id:'stand',name:'金属旋转手机支架',note:'360° 旋转 · 解放双手',icon:'stand',quantity:1,unit:'个',enabled:true},
-  {id:'cup',name:'竹节吸管随行杯',note:'把温柔 · 装进日常',icon:'cup',quantity:1,unit:'个',enabled:true},
-  {id:'tote',name:'便携折叠环保袋',note:'轻装出门 · 满载美好',icon:'tote',quantity:1,unit:'个',enabled:true}
-]};
-let config = structuredClone(defaults), history = [], drawing = false, toastTimer, photoSequence = 0;
 
-function validateConfig(value) {
-  if (!value || typeof value.showQuantity !== 'boolean' || !Array.isArray(value.gifts) || value.gifts.length > 12) throw Error('礼品设置格式有误');
-  const ids = new Set();
-  for (const gift of value.gifts) {
-    if (!gift || typeof gift.id !== 'string' || !gift.id || ids.has(gift.id) ||
-        typeof gift.name !== 'string' || !gift.name.trim() || gift.name.length > 32 ||
-        typeof gift.note !== 'string' || gift.note.length > 64 || !Object.hasOwn(illustrations, gift.icon) ||
-        !Number.isInteger(gift.quantity) || gift.quantity < 1 || gift.quantity > 99 ||
-        typeof gift.unit !== 'string' || !gift.unit.trim() || gift.unit.length > 6 || typeof gift.enabled !== 'boolean') throw Error('请检查礼品名称、每份数量与单位');
-    ids.add(gift.id);
-  }
-  return value;
+let config = {activityEnabled:false,showQuantity:true,gifts:[]}, history = [], drawing = false, toastTimer, photoSequence = 0;
+
+let revision = 0, cloudReady = false, starting = false, saving = false, openingSettings = false;
+let syncController, syncEpoch = 0, syncTask, editorRevision = 0;
+function controls() {
+  $('draw-button').disabled = drawing || starting || saving || openingSettings || !cloudReady || !config.activityEnabled || !config.gifts.some(g=>g.enabled);
+  $('open-settings').disabled = drawing || starting || saving || openingSettings;
 }
+function cloudStatus(message, failed=false) {
+  $('cloud-message').textContent = message;
+  $('retry-sync').hidden = !failed;
+}
+async function api(path, options={}) {
+  const controller = options.signal ? null : new AbortController();
+  const timeout = controller && setTimeout(()=>controller.abort(),12000);
+  try {
+    const response = await fetch('/draw/api/'+path,{cache:'no-store',credentials:'same-origin',...options,signal:options.signal || controller.signal});
+    if(response.status===304) return null;
+    let result;
+    try { result=await response.json(); } catch(_) { throw Error('云端响应异常，请稍后重试'); }
+    if(!response.ok) { const error=Error(result.error || '云端请求失败'); error.data=result; error.status=response.status; throw error; }
+    return result;
+  } finally { if(timeout) clearTimeout(timeout); }
+}
+function snapshot(value) {
+  if(!value || !Number.isSafeInteger(value.revision) || value.revision<revision) return;
+  const next=validateDrawConfig(value.config), changed=value.revision!==revision || !cloudReady;
+  config=next; revision=value.revision; cloudReady=true;
+  if(changed) renderPool();
+  cloudStatus(config.activityEnabled ? '云端奖池已同步 · 所有设备共享' : '活动已暂停 · 所有设备同步');
+  controls();
+}
+function stopSync() { syncEpoch++; syncController?.abort(); syncTask=null; }
+async function syncConfig(force=false) {
+  if(!force && (drawing || starting || saving || openingSettings || $('settings').open || $('auth-dialog').open)) return;
+  if(syncTask && !force) return syncTask;
+  stopSync(); const epoch=syncEpoch;
+  const controller=new AbortController(); syncController=controller;
+  const timer=setTimeout(()=>controller.abort(),10000);
+  const task=(async()=>{
+    try {
+      const value=await api('config',{signal:controller.signal,headers:cloudReady?{'If-None-Match':`"draw-config-${revision}"`}:{}});
+      if(epoch!==syncEpoch) return;
+      if(value) snapshot(value);
+      else { cloudReady=true; cloudStatus(config.activityEnabled?'云端奖池已同步 · 所有设备共享':'活动已暂停 · 所有设备同步'); controls(); }
+    } catch(error) {
+      if(epoch!==syncEpoch) return;
+      cloudReady=false; cloudStatus('暂未连接云端，重新连接后即可抽奖',true); controls();
+      if(force) throw error;
+    } finally { clearTimeout(timer); if(epoch===syncEpoch) syncTask=null; }
+  })();
+  syncTask=task; return task;
+}
+
 function toast(message) {
   clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false;
   toastTimer = setTimeout(() => $('toast').hidden = true, 4500);
 }
-try {
-  const saved = localStorage.getItem(CONFIG_KEY);
-  if (saved) config = validateConfig(JSON.parse(saved));
-} catch (_) { toast('未能读取本机设置，暂时使用默认礼品。'); }
 try {
   const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
   if (!Array.isArray(saved)) throw Error();
@@ -105,7 +134,7 @@ function renderPool() {
   document.querySelector('.collection-number').textContent = gifts.length ? '01—' + String(gifts.length).padStart(2,'0') : '—';
   $('pool-empty').hidden = !!gifts.length;
   $('prize-grid').hidden = !gifts.length;
-  $('draw-button').disabled = !gifts.length;
+  controls();
   resetResult();
 }
 function resetResult() {
@@ -113,7 +142,7 @@ function resetResult() {
   $('hero-art').replaceChildren(art('gift'));
   $('result-kicker').textContent = '一份幸运 · 一份心意';
   $('result-title').textContent = '下一份惊喜，属于你';
-  $('result-detail').textContent = config.gifts.some(g => g.enabled) ? '点击下方按钮，开启你的专属好礼' : '先在活动设置中，开启你喜欢的礼品';
+  $('result-detail').textContent = !cloudReady ? '正在连接云端奖池，请稍候' : !config.activityEnabled ? '活动暂时休息，期待下一份美好' : config.gifts.some(g => g.enabled) ? '点击下方按钮，开启你的专属好礼' : '好礼正在准备中，请稍后再来';
   $('draw-label').textContent = '开启幸运';
 }
 function renderHistory() {
@@ -126,11 +155,6 @@ function renderHistory() {
     card.append(art(item.icon),copy); return card;
   }));
 }
-function randomIndex(count) {
-  const bytes = new Uint32Array(1), limit = Math.floor(4294967296/count)*count;
-  do { crypto.getRandomValues(bytes); } while (bytes[0] >= limit);
-  return bytes[0] % count;
-}
 function celebrate() {
   const nodes = Array.from({length:matchMedia('(max-width:760px)').matches ? 16 : 26}, (_,i) => {
     const node = el('i'); node.style.background = ['#e6c585','#6e9be4','#adc9ed','#fff1cc'][i%4];
@@ -141,11 +165,22 @@ function celebrate() {
   $('confetti').replaceChildren(...nodes);
   setTimeout(() => $('confetti').replaceChildren(),1400);
 }
-function draw() {
-  if (drawing || $('settings').open) return;
-  const gifts = config.gifts.filter(g => g.enabled).map(g => ({...g}));
-  if (!gifts.length) return;
-  const index = randomIndex(gifts.length), winner = gifts[index];
+async function draw() {
+  if (drawing || starting || saving || openingSettings || !cloudReady || $('settings').open || $('auth-dialog').open) return;
+  starting=true; stopSync(); controls(); $('draw-label').textContent='正在确认云端奖池…';
+  let result;
+  try {
+    result=await api('draw',{method:'POST'});
+    snapshot(result);
+  } catch(error) {
+    if(error.data?.config) snapshot(error.data);
+    else { cloudReady=false; cloudStatus('抽奖未完成，请重新连接后再试',true); }
+    starting=false; controls(); $('draw-label').textContent='开启幸运'; toast(error.message || '网络异常，请重试'); return;
+  }
+  const gifts=config.gifts.filter(g=>g.enabled).map(g=>({...g}));
+  const index=gifts.findIndex(g=>g.id===result.winner.id), winner=gifts[index];
+  if(!winner) { starting=false; controls(); toast('奖池响应异常，请重试'); return; }
+  starting=false;
   const reduced = matchMedia('(prefers-reduced-motion:reduce)').matches;
   const duration = reduced ? 80 : gifts.length === 1 ? 750 : 2900;
   const cards = [...$('prize-grid').children], stage = document.querySelector('.stage');
@@ -172,11 +207,11 @@ function draw() {
     const bundle = config.showQuantity ? portion(winner) : '';
     $('result-detail').textContent = [bundle,winner.note].filter(Boolean).join(' · ');
     $('draw-label').textContent = '再开启一份幸运';
-    history.unshift({name:winner.name, icon:winner.icon, portion:bundle, time:Date.now()});
+    history.unshift({name:winner.name, icon:winner.icon, portion:bundle, time:result.time});
     history = history.slice(0,12);
     try { localStorage.setItem(HISTORY_KEY,JSON.stringify(history)); }
     catch (_) { toast('本次结果已揭晓，但记录未能保存到浏览器。'); }
-    renderHistory(); drawing = false; $('draw-button').disabled = false; $('open-settings').disabled = false;
+    renderHistory(); drawing = false; controls();
     if (!reduced) celebrate();
   };
   const tick = now => {
@@ -208,28 +243,72 @@ function editor(gift) {
   const note = field('一句介绍（可选）',input('note',gift.note,64)); note.className = 'editor-note';
   row.append(top,fields,note); return row;
 }
-function openSettings() {
-  if (drawing) return;
-  $('settings-error').hidden = true;
+function fillSettings() {
+  $('settings-error').hidden=true; $('reload-settings').hidden=true; $('reauth').hidden=true;
   $('gift-editors').replaceChildren(...config.gifts.map(editor));
-  $('show-quantity').checked = config.showQuantity;
-  $('add-gift').disabled = config.gifts.length >= 12;
-  $('settings').showModal();
+  $('show-quantity').checked=config.showQuantity; $('activity-enabled').checked=config.activityEnabled;
+  $('add-gift').disabled=config.gifts.length>=12; editorRevision=revision;
 }
-$('settings-form').onsubmit = event => {
-  event.preventDefault();
+function showAuth() {
+  $('auth-error').hidden=true; $('admin-password').value=''; $('auth-dialog').showModal();
+}
+async function openSettings() {
+  if(drawing || starting || saving || openingSettings) return;
+  openingSettings=true; stopSync(); controls();
+  try {
+    const session=await api('auth');
+    if(!session.authenticated) { showAuth(); return; }
+    await syncConfig(true); fillSettings(); $('settings').showModal();
+  } catch(error) { toast(error.message || '暂时无法打开设置'); }
+  finally { openingSettings=false; controls(); }
+}
+let authenticating=false;
+$('auth-form').onsubmit=async event=>{
+  event.preventDefault(); if(authenticating) return;
+  authenticating=true; $('auth-error').hidden=true;
+  const button=$('auth-form').querySelector('[type=submit]'); button.disabled=true;
+  try {
+    await api('auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('admin-password').value})});
+    $('admin-password').value='';
+    if(!$('settings').open) { await syncConfig(true); fillSettings(); $('settings').showModal(); }
+    else { $('reauth').hidden=true; $('settings-error').hidden=true; }
+    $('auth-dialog').close();
+  } catch(error) { $('auth-error').textContent=error.message || '验证失败，请重试'; $('auth-error').hidden=false; }
+  finally { authenticating=false; button.disabled=false; }
+};
+$('cancel-auth').onclick=()=>{if(!authenticating) $('auth-dialog').close();};
+$('auth-dialog').addEventListener('cancel',event=>{if(authenticating) event.preventDefault();});
+$('auth-dialog').addEventListener('close',()=>{$('admin-password').value='';});
+$('reauth').onclick=showAuth;
+$('reload-settings').onclick=async()=>{
+  if(!confirm('将放弃当前未保存的修改，加载云端最新版。继续吗？')) return;
+  try { await syncConfig(true); fillSettings(); } catch(error) { toast(error.message); }
+};
+$('settings-form').onsubmit = async event => {
+  event.preventDefault(); if(saving) return;
+  $('settings-error').hidden=true; $('reload-settings').hidden=true; $('reauth').hidden=true;
   try {
     const gifts = [...$('gift-editors').children].map(row => {
       const get = name => row.querySelector(`[name="${name}"]`);
       return {id:row.dataset.id,name:get('name').value.trim(),note:get('note').value.trim(),
         icon:get('icon').value,quantity:Number(get('quantity').value),unit:get('unit').value.trim(),enabled:get('enabled').checked};
     });
-    const next = validateConfig({showQuantity:$('show-quantity').checked,gifts});
-    try { localStorage.setItem(CONFIG_KEY,JSON.stringify(next)); }
-    catch (_) { throw Error('浏览器未能保存设置，请检查存储空间或浏览器隐私设置。你的修改仍保留在这里。'); }
-    config = next; renderPool(); $('settings').close(); toast('设置已保存，好礼已准备就绪');
-  } catch(error) { $('settings-error').textContent = error.message; $('settings-error').hidden = false; $('settings-error').scrollIntoView({block:'nearest'}); }
+    const next = validateDrawConfig({activityEnabled:$('activity-enabled').checked,showQuantity:$('show-quantity').checked,gifts});
+    saving=true; stopSync(); controls();
+    const fields=[...$('settings-form').querySelectorAll('input,select,button')];
+    const previous=fields.map(node=>node.disabled); fields.forEach(node=>node.disabled=true);
+    try {
+      const value=await api('config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:editorRevision,config:next})});
+      snapshot(value); $('settings').close(); toast('云端设置已保存，所有设备将同步更新');
+    } finally { fields.forEach((node,i)=>node.disabled=previous[i]); }
+  } catch(error) {
+    $('settings-error').textContent=error.message || '保存失败，你的修改仍保留在这里'; $('settings-error').hidden=false;
+    $('reload-settings').hidden=error.status!==409; $('reauth').hidden=error.status!==401;
+    $('settings-error').scrollIntoView({block:'nearest'});
+  } finally { saving=false; controls(); }
 };
+$('settings').addEventListener('cancel',event=>{if(saving) event.preventDefault();});
+$('settings').addEventListener('close',()=>{if(!saving) syncConfig();});
 $('add-gift').onclick = () => {
   if ($('gift-editors').children.length >= 12) return;
   const row = editor({id:crypto.randomUUID(),name:'',note:'',icon:'gift',quantity:1,unit:'份',enabled:true});
@@ -237,6 +316,10 @@ $('add-gift').onclick = () => {
   $('add-gift').disabled = $('gift-editors').children.length >= 12;
 };
 $('open-settings').onclick = openSettings; $('empty-settings').onclick = openSettings;
-$('close-settings').onclick = $('cancel-settings').onclick = () => $('settings').close();
+$('close-settings').onclick = $('cancel-settings').onclick = () => { if(!saving) $('settings').close(); };
 $('draw-button').onclick = draw;
-renderPool(); renderHistory();
+$('retry-sync').onclick=()=>syncConfig();
+renderPool(); renderHistory(); syncConfig();
+setInterval(()=>{if(!document.hidden) syncConfig();},8000);
+window.addEventListener('focus',()=>syncConfig());
+document.addEventListener('visibilitychange',()=>{if(!document.hidden) syncConfig();});
