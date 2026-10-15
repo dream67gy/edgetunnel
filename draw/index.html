@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123fa0">
+<meta name="description" content="兴享好礼，一份幸运，一份心意。选择参与的礼品，开启今日惊喜。">
+<title>兴享好礼 · 幸运抽奖</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23123fa0'/%3E%3Ctext x='20' y='28' text-anchor='middle' font-size='26' fill='white'%3E礼%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/draw/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#draw-button">跳到抽奖</a>
+<header class="header wrap">
+  <a href="/draw" class="brand" aria-label="兴业银行主题抽奖首页"><span class="brand-type">兴业银行<small>INDUSTRIAL BANK</small></span><span class="brand-divider"></span><span class="brand-event">心意礼遇</span></a>
+  <button class="settings-button" id="open-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/></svg><span>活动设置</span></button>
+</header>
+<main class="wrap">
+  <section class="intro" aria-labelledby="page-title">
+    <div><p class="eyebrow"><span></span> A LITTLE LUCK, A LOVELY DAY</p><h1 id="page-title">兴享好礼<span>，</span>幸运有你<span>。</span></h1><p class="intro-copy">把一份小惊喜，装进今天的好心情。</p></div>
+    <div class="intro-seal" aria-hidden="true"><span>GOOD THINGS</span><b>好礼<br>相伴</b><span>COME YOUR WAY</span></div>
+  </section>
+  <div class="draw-layout">
+    <section class="stage" aria-labelledby="stage-heading">
+      <div class="stage-top"><span id="stage-heading">你的幸运时刻</span><span class="stage-tag"><i></i> READY FOR YOU</span></div>
+      <div class="stage-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="spark spark-one">✦</span><span class="spark spark-two">✧</span><span class="spark spark-three">✦</span><div id="hero-art"></div><div class="art-platform"></div></div>
+      <div class="result" aria-live="polite" aria-atomic="true"><p id="result-kicker">一份幸运 · 一份心意</p><h2 id="result-title">下一份惊喜，属于你</h2><p id="result-detail">点击下方按钮，开启你的专属好礼</p></div>
+      <button class="draw-button" id="draw-button"><span aria-hidden="true">✦</span><span id="draw-label">开启幸运</span><span aria-hidden="true">↗</span></button>
+      <p class="stage-note" id="stage-note">每次抽取 1 份礼品 · 好心意，不限次</p>
+    </section>
+    <section class="prizes-panel" aria-labelledby="prizes-heading">
+      <div class="section-heading"><div><p class="eyebrow">THE GIFT COLLECTION</p><h2 id="prizes-heading">日常小美好<span id="prize-count">6 款心意</span></h2></div><span class="collection-number" aria-hidden="true">01—06</span></div>
+      <p class="section-copy">实用的、贴心的，都是为你准备的。</p>
+      <div class="prize-grid" id="prize-grid"></div>
+      <div class="pool-empty" id="pool-empty" hidden><span aria-hidden="true">✧</span><h3>好礼正在准备中</h3><p>在活动设置中开启至少一款礼品，就能开始抽奖。</p><button class="secondary" id="empty-settings">选择参与礼品</button></div>
+      <div class="collection-foot"><span><i></i> 每款已开启礼品，中奖机会相同</span><span>小物件 · 大心意</span></div>
+    </section>
+  </div>
+  <section class="history" aria-labelledby="history-heading"><div class="history-heading"><h2 id="history-heading">幸运留影 <span>LUCKY MOMENTS</span></h2><span>仅记录本机最近 12 次</span></div><div id="history-list" class="history-list"><p class="history-empty">第一份幸运，等你来开启。</p></div></section>
+  <details class="rules"><summary>关于这份幸运 <span aria-hidden="true">＋</span></summary><p>每次从已开启的礼品中等概率随机抽取 1 份，礼品可重复中奖，不扣减库存。每份内容以页面展示和活动现场安排为准。礼品设置与抽奖记录保存在当前浏览器，不会同步到其他设备。</p></details>
+</main>
+<footer class="wrap"><span>兴享好礼 · 让美好发生</span><span>EVERYDAY, A LITTLE MORE JOY.</span></footer>
+<dialog id="settings" aria-labelledby="settings-title">
+  <form id="settings-form">
+    <div class="dialog-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h2 id="settings-title">准备一份好礼</h2></div><button class="close-button" id="close-settings" type="button" aria-label="关闭活动设置">×</button></div>
+    <p class="dialog-intro">开关决定礼品是否参与抽奖。每份数量可自定，抽纸已为你设为 2 包。</p>
+    <div id="gift-editors" class="gift-editors"></div>
+    <div class="settings-options"><button class="secondary" id="add-gift" type="button">＋ 添加礼品</button><label><input id="show-quantity" type="checkbox" checked> 展示每份数量</label></div>
+    <p class="save-scope">设置仅保存在当前浏览器；关闭的礼品不会出现在抽奖池中。</p>
+    <p id="settings-error" class="error" role="alert" hidden></p>
+    <div class="dialog-footer"><button type="button" class="secondary" id="cancel-settings">取消</button><button type="submit" class="save-button">保存设置</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<div id="confetti" class="confetti" aria-hidden="true"></div>
+<script src="/draw/app.js"></script>
+</body>
+</html>

@@ -68,6 +68,8 @@ async function fixture(t, mode) {
     ['/eatery', 'GET'], ['/eat/assets/missing', 'GET'], ['/eat', 'POST'],
     ['/eat', 'GET', { Upgrade: 'websocket' }],
     ['/eat/api/pool', 'GET', { Upgrade: 'websocket' }],
+    ['/drawing', 'GET'], ['/draw/assets/missing', 'GET'], ['/draw', 'POST'],
+    ['/draw', 'GET', { Upgrade: 'websocket' }],
   ]) {
     const request = new Request(`https://example.test${path}`, { method, headers, body: method === 'POST' ? 'unchanged' : undefined });
     const result = new Response('upstream');
@@ -76,6 +78,33 @@ async function fixture(t, mode) {
     assert.equal(env.received.request, request);
     assert.equal(env.received.ctx, ctx);
     if (method === 'POST') assert.equal(await request.text(), 'unchanged');
+  }
+});
+
+test('draw routes serve the new page in both modes with independent cache validation', async t => {
+  for (const mode of ['combined', 'standalone']) {
+    const { modules } = await fixture(t, mode);
+    const { default: worker } = await import(pathToFileURL(join(modules, 'index.js')));
+    for (const path of ['/draw', '/draw/']) {
+      const url = 'https://example.test' + path;
+      const first = await worker.fetch(new Request(url), {}, {});
+      assert.equal(first.status, 200);
+      const html = await first.text();
+      assert.match(html, /兴享好礼/);
+      assert.match(html, /维达联名抽纸/);
+      assert.doesNotMatch(html, /src="\/draw\/app.js"|href="\/draw\/styles.css"/);
+      const tag = '"draw-page-' + createHash('sha256').update(html).digest('hex').slice(0,24) + '"';
+      assert.equal(first.headers.get('ETag'), tag);
+      const cached = await worker.fetch(new Request(url, {headers:{'If-None-Match': 'W/' + tag}}), {}, {});
+      assert.equal(cached.status, 304);
+      assert.equal(await cached.text(), '');
+      const head = await worker.fetch(new Request(url, {method:'HEAD'}), {}, {});
+      assert.equal(head.status, 200);
+      assert.equal(await head.text(), '');
+      assert.equal(head.headers.get('ETag'), tag);
+      const stale = await worker.fetch(new Request(url, {headers:{'If-None-Match':'"old"'}}), {}, {});
+      assert.equal(stale.status, 200);
+    }
   }
 });
 

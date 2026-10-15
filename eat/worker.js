@@ -4,6 +4,7 @@ import {
 import {
   EAT_HTML, EAT_ETAG
 } from './page.js';
+import { DRAW_HTML, DRAW_ETAG } from './draw-page.js';
 
 // Returning null delegates the original Request, env and ctx to the host application.
 export async function handleEat(request, env) {
@@ -12,18 +13,21 @@ export async function handleEat(request, env) {
     pathname
   } = new URL(request.url);
   if (pathname === '/eat/api/pool') return eatPoolAPI(request, env);
-  if ((pathname === '/eat' || pathname === '/eat/') &&
+  const isDraw = pathname === '/draw' || pathname === '/draw/';
+  if ((pathname === '/eat' || pathname === '/eat/' || isDraw) &&
     (request.method === 'GET' || request.method === 'HEAD')) {
+    const html = isDraw ? DRAW_HTML : EAT_HTML;
+    const etag = isDraw ? DRAW_ETAG : EAT_ETAG;
     const headers = {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-cache',
       'X-Content-Type-Options': 'nosniff',
-      'ETag': EAT_ETAG,
+      'ETag': etag,
     };
     const matches = (request.headers.get('If-None-Match') || '').split(',').some(value =>
-      value.trim() === '*' || value.trim().replace(/^W\//, '') === EAT_ETAG);
+      value.trim() === '*' || value.trim().replace(/^W\//, '') === etag);
     if (matches) return new Response(null, { status: 304, headers });
-    return new Response(request.method === 'HEAD' ? null : EAT_HTML, { headers });
+    return new Response(request.method === 'HEAD' ? null : html, { headers });
   }
   return null;
 }

@@ -32,6 +32,16 @@ def build(mode='combined', output=None):
         raise ValueError('Expected one Eat stylesheet and script reference in index.html')
     html = html.replace(style_tag, '<style>\n' + (APP / 'styles.css').read_text(encoding='utf-8') + '</style>')
     html = html.replace(script_tag, '<script>\n' + (APP / 'app.js').read_text(encoding='utf-8') + '</script>')
+    draw = ROOT / 'draw'
+    draw_html = (draw / 'index.html').read_text(encoding='utf-8')
+    for tag, name, wrapper in [
+        ('<link rel="stylesheet" href="/draw/styles.css">', 'styles.css', 'style'),
+        ('<script src="/draw/app.js"></script>', 'app.js', 'script'),
+    ]:
+        if draw_html.count(tag) != 1:
+            raise ValueError('Expected one Draw asset reference: ' + name)
+        draw_html = draw_html.replace(tag, '<' + wrapper + '>\n' +
+                                      (draw / name).read_text(encoding='utf-8') + '</' + wrapper + '>')
     if modules.is_symlink():
         raise ValueError('Refusing to replace a symlinked Worker directory')
     if modules.is_dir():
@@ -45,6 +55,10 @@ def build(mode='combined', output=None):
     (modules / 'page.js').write_text(
         'export const EAT_HTML = ' + json.dumps(html, ensure_ascii=False) + ';\n' +
         'export const EAT_ETAG = ' + json.dumps(etag) + ';\n', encoding='utf-8')
+    draw_etag = '"draw-page-' + hashlib.sha256(draw_html.encode('utf-8')).hexdigest()[:24] + '"'
+    (modules / 'draw-page.js').write_text(
+        'export const DRAW_HTML = ' + json.dumps(draw_html, ensure_ascii=False) + ';\n' +
+        'export const DRAW_ETAG = ' + json.dumps(draw_etag) + ';\n', encoding='utf-8')
     if mode == 'combined':
         shutil.copyfile(ROOT / '_worker.js', modules / 'upstream.js')
         shutil.copyfile(APP / 'combined.js', modules / 'index.js')
