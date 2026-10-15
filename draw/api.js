@@ -79,9 +79,8 @@ export async function drawAPI(request,env) {
   try {
     let password;
     if(path === '/draw/api/auth' || method === 'PUT') {
-      const kv = env.DRAW_KV || env.KV;
-      password = await kv?.get('DRAW_ADMIN_PASSWORD');
-      if(typeof password !== 'string' || !password.length) return json({error:'管理密码尚未配置，请在 KV 设置 DRAW_ADMIN_PASSWORD',code:'AUTH_NOT_CONFIGURED'},503);
+      password = env.DRAW_ADMIN_PASSWORD;
+      if(typeof password !== 'string' || !password.length) return json({error:'管理密码尚未配置，请在变量和密钥中设置 DRAW_ADMIN_PASSWORD',code:'AUTH_NOT_CONFIGURED'},503);
       if(method !== 'POST') {
         const authenticated = await authorized(request,password);
         if(path === '/draw/api/auth') return json({authenticated});
@@ -126,6 +125,6 @@ export async function drawAPI(request,env) {
   } catch(error) {
     if(error.message === 'TOO_LARGE') return json({error:'数据过大'},413);
     if(error.message === 'JSON' || error instanceof SyntaxError) return json({error:'请求数据格式不正确'},400);
-    return json({error:'云端服务暂不可用，请检查 D1 / KV 绑定并重试',code:'UNAVAILABLE'},503);
+    return json({error:'云端服务暂不可用，请检查 D1 绑定和管理密码配置并重试',code:'UNAVAILABLE'},503);
   }
 }

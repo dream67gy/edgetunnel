@@ -1,4 +1,4 @@
-"""Run the real Worker API against SQLite and an in-memory KV test binding."""
+"""Run the real Worker API against SQLite and a runtime secret test binding."""
 import json
 import sqlite3
 from functools import partial
@@ -21,8 +21,7 @@ class Backend:
             constructor(body, init) { super(body,init); Object.defineProperty(this,'headers',{value:new Headers(init?.headers)}); }
           };
           globalThis.api = (await import('/draw/api.js')).drawAPI;
-          globalThis.secret = 'test-only-secret';
-          globalThis.env = { KV: {get: async key => key === 'DRAW_ADMIN_PASSWORD' ? secret : null}, EAT_DB: {
+          globalThis.env = { DRAW_ADMIN_PASSWORD: 'test-only-secret', EAT_DB: {
             withSession(mode) {
               if(mode !== 'first-primary') throw Error('Not primary');
               return {prepare(query) {return {args:[], bind(...args){this.args=args;return this},

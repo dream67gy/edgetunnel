@@ -13,6 +13,9 @@ with sync_playwright() as p:
     api=backend.request
     assert api(missing=True)['status']==503
     assert api('auth',missing=True)['status']==503
+    backend.page.evaluate("env.DRAW_ADMIN_PASSWORD=''")
+    assert api('auth')['data']['code']=='AUTH_NOT_CONFIGURED'
+    backend.page.evaluate("env.DRAW_ADMIN_PASSWORD='test-only-secret'")
     assert api(method='DELETE')['status']==405
     current=api()['data']
     assert len(current['config']['gifts'])==6
@@ -32,9 +35,9 @@ with sync_playwright() as p:
     assert api(method='PUT',data=current,headers=auth)['status']==200
     assert api(method='PUT',data=current,headers=auth)['status']==409
     # Rotation revokes existing sessions.
-    backend.page.evaluate("secret='rotated-test-secret'")
+    backend.page.evaluate("env.DRAW_ADMIN_PASSWORD='rotated-test-secret'")
     assert api(method='PUT',data=current,headers=auth)['status']==401
-    backend.page.evaluate("secret='test-only-secret'")
+    backend.page.evaluate("env.DRAW_ADMIN_PASSWORD='test-only-secret'")
     for _ in range(10):
         assert api('auth','POST',{'password':'wrong'})['status']==401
     assert api('auth','POST',{'password':'test-only-secret'})['status']==429
@@ -104,4 +107,4 @@ with sync_playwright() as p:
     b.reload();expect(b.locator('#retry-sync')).to_be_visible();expect(b.locator('#draw-button')).to_be_disabled()
     assert not errors,errors
     backend.close();browser.close()
-print('PASS: real API/SQLite/KV; primary reads; authentication/cookie/rotation/throttling; CAS; two-device sync; reauth drafts; private histories; stale/paused/empty/offline draw protection')
+print('PASS: real API/SQLite/runtime secret; primary reads; authentication/cookie/rotation/throttling; CAS; two-device sync; reauth drafts; private histories; stale/paused/empty/offline draw protection')

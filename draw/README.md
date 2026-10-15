@@ -1,7 +1,7 @@
 # 兴享好礼 /draw
 
 与 Eat 同一域名下的独立抽奖页面，入口为 `/draw` 或 `/draw/`。
-沿用当前 Cloudflare Pages 构建命令 `python3 eat/build.py` 和输出目录 `dist/combined`，无需增加域名。云端配置复用 `EAT_DB` 数据库和 `KV` 命名空间绑定。
+沿用当前 Cloudflare Pages 构建命令 `python3 eat/build.py` 和输出目录 `dist/combined`，无需增加域名。云端配置复用 `EAT_DB` 数据库，管理密码通过运行时变量和密钥配置。
 独立构建 `python3 eat/build.py --mode standalone` 同样包含该页面。
 
 默认六类礼品：A5 计划本、维达抽纸、山茶花垃圾袋、金属手机支架、竹节随行杯、折叠环保袋。
@@ -15,12 +15,12 @@
 ## Cloudflare 配置
 
 1. Pages → 当前项目 → Settings → Bindings，确认 D1 绑定 `EAT_DB`（与 Eat 共用）。也支持独立的 `DRAW_DB`，存在时优先使用。
-2. 确认 Workers KV 命名空间绑定名为 `KV`；也支持专用 `DRAW_KV`，存在时优先使用。
-3. 在对应 KV 命名空间中新增键 **`DRAW_ADMIN_PASSWORD`**，值填写管理员指定的密码。不要把密码写入源代码、构建变量或公开页面。
-4. 绑定有变更时重新部署。首次访问会自动建立 `draw_config`、`draw_auth_attempts` 两张表并初始化六款礼品，无需手动执行 SQL，不修改 Eat 表。
+2. 选择生产环境，在 Settings → Variables and Secrets（变量和密钥）中新增 **`DRAW_ADMIN_PASSWORD`**，类型选择“密钥”（加密），值填写管理员指定的密码。保留现有 `ADMIN` 变量；它与抽奖管理密码无关。预览环境如需使用，应单独配置。
+3. 保存后重新部署，确保新的运行时配置生效。不要把密码写入源代码或公开页面。抽奖功能不再读取 KV 中的密码；其他功能原有的 KV 绑定保留。
+4. 首次访问会自动建立 `draw_config`、`draw_auth_attempts` 两张表并初始化六款礼品，无需手动执行 SQL，不修改 Eat 表。
 
-管理密码只在服务端从 KV 读取。验证成功签发 30 分钟的 HttpOnly / Secure / SameSite=Strict Cookie；会话不存放在 localStorage。每个来源 IP 在 15 分钟内最多尝试 10 次，成功后清零；失败计数保存为 IP 哈希。没有密码或数据库绑定时不会退回无密码管理或本地抽奖。
-修改 KV 密码可使旧会话失效，但 [KV 为最终一致存储](https://developers.cloudflare.com/kv/concepts/how-kv-works/)，跨区域更新可能延迟 60 秒或更久。奖池使用 D1 主库读取及原子版本更新，避免用 KV 保存需要并发控制的活动配置。
+管理密码只在服务端从 `env.DRAW_ADMIN_PASSWORD` 读取，不会嵌入构建产物或返回给前端。验证成功签发 30 分钟的 HttpOnly / Secure / SameSite=Strict Cookie；会话不存放在 localStorage。每个来源 IP 在 15 分钟内最多尝试 10 次，成功后清零；失败计数保存为 IP 哈希。没有密码或数据库绑定时不会退回无密码管理或本地抽奖。
+修改密钥并重新部署后，新部署会拒绝旧密码签发的会话。配置方式见 [Cloudflare Pages 变量和密钥文档](https://developers.cloudflare.com/pages/functions/bindings/#secrets)。奖池继续使用 D1 主库读取及原子版本更新。
 
 接口：`GET /draw/api/config` 读取共享配置；`POST /draw/api/draw` 取得当前快照及中奖结果；`POST /draw/api/auth` 登录；`GET /draw/api/auth` 检查会话；`DELETE /draw/api/auth` 注销；`PUT /draw/api/config` 需要有效管理会话。接口均禁止缓存，配置 GET 支持 ETag，修改接口检查请求来源。返回中不包含密码或他人的抽奖记录。
 
