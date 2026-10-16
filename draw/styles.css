@@ -81,3 +81,6 @@ body{background:radial-gradient(ellipse at 85% 0,#eaf0fa 0,transparent 42%),var(
   .settings-button svg{width:12px;height:12px}
   .prize-grid{gap:10px}.prize-art{height:104px}.prize-card{padding:13px 8px}
 }
+/* The short login form does not need the settings editor's sticky footer. */
+#auth-form .dialog-footer{position:static;margin-top:22px;border-top:0;padding:0;background:transparent}
+.password-field input:focus-visible{outline:2px solid #4c8cff;outline-offset:2px;border-color:#7da4ee}
