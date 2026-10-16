@@ -131,7 +131,7 @@ with sync_playwright() as p:
     assert api(method='PUT',data=current,headers=auth)['status']==200
     visitor_cookie=api('participation')['headers']['set-cookie'].split(';')[0]
     assert api('draw','POST',headers={'Cookie':visitor_cookie})['data']['code']=='EMPTY'
-    b.reload();expect(b.locator('#cloud-message')).to_contain_text('已同步')
+    b.reload();expect(b.locator('#cloud-message')).to_contain_text('好礼已就绪')
     expect(b.locator('.prize-card')).to_have_count(0)
     # A paused/removed prize cannot erase or change an existing award.
     saved=api('draw','POST',headers={'Cookie':visitor['headers']['set-cookie'].split(';')[0]})

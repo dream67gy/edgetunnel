@@ -52,7 +52,7 @@ function snapshot(value) {
   const next=validateDrawConfig(value.config), changed=value.revision!==revision || !cloudReady;
   config=next; revision=value.revision; cloudReady=true;
   if(changed) renderPool();
-  cloudStatus(config.activityEnabled ? '云端奖池已同步 · 所有设备共享' : '活动已暂停 · 所有设备同步');
+  cloudStatus(config.activityEnabled ? '好礼已就绪' : '活动暂时休息');
   controls();
 }
 function stopSync() { syncEpoch++; syncController?.abort(); syncTask=null; }
@@ -74,11 +74,11 @@ async function syncConfig(force=false) {
       receipt=participation.result;
       if(receipt) rememberResult(receipt);
       if(value) snapshot(value);
-      else { cloudReady=true; cloudStatus(config.activityEnabled?'云端奖池已同步 · 所有设备共享':'活动已暂停 · 所有设备同步'); controls(); }
+      else { cloudReady=true; cloudStatus(config.activityEnabled?'好礼已就绪':'活动暂时休息'); controls(); }
       if(receipt) showReceipt();
     } catch(error) {
       if(epoch!==syncEpoch) return;
-      cloudReady=false; cloudStatus('暂未连接云端，重新连接后即可抽奖',true); controls();
+      cloudReady=false; cloudStatus('暂时连接不上，请稍后重试',true); controls();
       if(force) throw error;
     } finally { clearTimeout(timer); if(epoch===syncEpoch) syncTask=null; }
   })();
@@ -163,6 +163,7 @@ function showReceipt() {
   $('result-title').textContent=winner.name;
   $('result-detail').textContent=[receipt.showQuantity?portion(winner):'',winner.note].filter(Boolean).join(' · ');
   $('draw-label').textContent='已参与抽奖';
+  $('stage-status').textContent='好礼已揭晓';
   for(const card of $('prize-grid').children) card.classList.toggle('winner',card.dataset.id===winner.id);
   controls();
 }
@@ -172,8 +173,9 @@ function resetResult() {
   $('hero-art').replaceChildren(art('gift'));
   $('result-kicker').textContent = '一份幸运 · 一份心意';
   $('result-title').textContent = '下一份惊喜，属于你';
-  $('result-detail').textContent = !cloudReady ? '正在连接云端奖池，请稍候' : !config.activityEnabled ? '活动暂时休息，期待下一份美好' : config.gifts.some(g => g.enabled) ? '点击下方按钮，开启你的专属好礼' : '好礼正在准备中，请稍后再来';
+  $('result-detail').textContent = !cloudReady ? '正在准备好礼，请稍候' : !config.activityEnabled ? '活动暂时休息，期待下一份美好' : config.gifts.some(g => g.enabled) ? '点击下方按钮，开启你的专属好礼' : '好礼正在准备中，请稍后再来';
   $('draw-label').textContent = '开启幸运';
+  $('stage-status').textContent=config.activityEnabled?'期待你的幸运':'期待再次相遇';
 }
 function renderHistory() {
   if (!history.length) { $('history-list').replaceChildren(el('p','history-empty','第一份幸运，等你来开启。')); return; }
@@ -197,7 +199,7 @@ function celebrate() {
 }
 async function draw() {
   if (drawing || starting || saving || openingSettings || !cloudReady || !participationReady || !!receipt || $('settings').open || $('auth-dialog').open) return;
-  starting=true; stopSync(); controls(); $('draw-label').textContent='正在确认云端奖池…';
+  starting=true; stopSync(); controls(); $('draw-label').textContent='正在开启幸运…';
   let result;
   try {
     result=await api('draw',{method:'POST'});
@@ -205,7 +207,7 @@ async function draw() {
     if(result.alreadyDrawn) { receipt=result; rememberResult(result); starting=false; showReceipt(); return; }
   } catch(error) {
     if(error.data?.config) snapshot(error.data);
-    else { cloudReady=false; cloudStatus('抽奖未完成，请重新连接后再试',true); }
+    else { cloudReady=false; cloudStatus('暂未收到结果，请重试查看',true); }
     starting=false; controls(); $('draw-label').textContent='开启幸运'; toast(error.message || '网络异常，请重试'); return;
   }
   const gifts=config.gifts.filter(g=>g.enabled).map(g=>({...g}));
@@ -219,6 +221,7 @@ async function draw() {
   cards.forEach(card => card.classList.remove('active','winner'));
   $('draw-button').disabled = true; $('open-settings').disabled = true;
   $('draw-label').textContent = '好运正在赶来…';
+  $('stage-status').textContent='好运正在赶来';
   $('result-kicker').textContent = '把期待，交给这一刻';
   $('result-title').textContent = '你的好礼，即将揭晓';
   $('result-detail').textContent = '每一份心意，都值得期待';

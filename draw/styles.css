@@ -37,3 +37,47 @@ dialog{border:1px solid var(--line);border-radius:22px;padding:0;width:min(690px
 .activity-toggle input{accent-color:var(--blue);width:17px;height:17px}.activity-toggle span{color:#7c8da8;font-size:10px;margin-left:auto}
 #auth-dialog{max-width:420px}#auth-form{padding:26px}.password-field{display:flex;flex-direction:column;gap:8px;font-size:12px;color:#647897}.password-field input{font-size:16px;padding:12px;border:1px solid var(--line);border-radius:9px;width:100%;color:var(--ink)}
 #reload-settings,#reauth{margin-bottom:12px}
+
+/* A quieter customer-facing activity page, with larger product frames on phones. */
+body{background:radial-gradient(ellipse at 85% 0,#eaf0fa 0,transparent 42%),var(--paper)}
+.brand-home,.brand-event{border-radius:5px;flex-shrink:0}
+.brand-event{padding:8px 0;transition:color .18s}
+.cloud-status{font-size:11px;gap:9px;color:#6e819b}
+.cloud-status:before{content:"";width:5px;height:5px;flex-shrink:0;border-radius:50%;background:#87aaa4}
+.stage{background:radial-gradient(ellipse at 22% 0,#2860bb70,transparent 62%),linear-gradient(135deg,#1749ab,#0d2b72 85%)}
+.draw-button{position:relative;isolation:isolate;overflow:hidden}
+.draw-button:before{content:"";position:absolute;inset:-80% -30%;background:linear-gradient(110deg,transparent 42%,#fff8 50%,transparent 58%);transform:translateX(-110%);pointer-events:none;z-index:-1}
+.won .draw-button:disabled{opacity:1;background:linear-gradient(110deg,#f0dfbb,#d9bd89);color:#5b4729;box-shadow:0 2px 0 #a99062;cursor:default}
+.prize-card{box-shadow:0 3px 14px #203b6604}
+.prize-art{border-radius:11px}
+.prize-card p{line-height:1.7}
+.rules summary{color:#61738e;padding:3px 0;font-size:12px}
+.rules summary>span{transition:transform .2s}
+.rules p{color:#7b899f;line-height:2;max-width:680px}
+.drawing .orbit-two{border-style:dashed;border-color:#e8cc9333;animation:orbit-turn 8s linear infinite}
+.drawing .spark{animation:spark-breathe .9s ease-in-out infinite alternate}
+.drawing .spark-two{animation-delay:.3s}
+@keyframes orbit-turn{to{transform:rotate(360deg)}}
+@keyframes spark-breathe{from{opacity:.4;transform:scale(.8)}to{opacity:1;transform:scale(1.12)}}
+@keyframes button-glint{to{transform:translateX(110%)}}
+@keyframes soft-arrive{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:no-preference){.intro{animation:soft-arrive .45s ease-out}.prizes-panel{animation:soft-arrive .6s ease-out}}
+@media(hover:hover){.brand-event:hover{color:var(--blue)}.draw-button:enabled:hover:before{animation:button-glint .75s ease-out}.prize-card:hover{box-shadow:0 8px 22px #1b3f7810}}
+@media(max-width:760px){
+  .prize-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .prize-card{padding:14px 10px 13px;border-radius:15px}
+  .prize-art{height:120px;margin:2px 0 10px}
+  .prize-art svg{width:110px;height:110px}
+  .prize-card h3{font-size:12px;margin-top:9px}
+  .prize-card p{font-size:10px}
+  .prize-quantity{font-size:10px;margin-top:10px}
+  .collection-foot{font-size:10px}
+  .stage-note{font-size:11px;letter-spacing:1px}
+}
+@media(max-width:360px){
+  .header{gap:8px}.brand{gap:8px}.brand-logo{width:130px}
+  .brand-event{display:block;font-size:10px;letter-spacing:0}
+  .settings-button{padding:8px;font-size:9px;gap:3px}
+  .settings-button svg{width:12px;height:12px}
+  .prize-grid{gap:10px}.prize-art{height:104px}.prize-card{padding:13px 8px}
+}

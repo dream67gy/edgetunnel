@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#123fa0">
-<meta name="description" content="兴享好礼，一份幸运，一份心意。选择参与的礼品，开启今日惊喜。">
+<meta name="description" content="兴享好礼，一份幸运，一份心意。每名参与用户限抽一次，开启今日惊喜。">
 <title>兴享好礼 · 幸运抽奖</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23123fa0'/%3E%3Ctext x='20' y='28' text-anchor='middle' font-size='26' fill='white'%3E礼%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/draw/styles.css">
@@ -12,7 +12,7 @@
 <body>
 <a class="skip-link" href="#draw-button">跳到抽奖</a>
 <header class="header wrap">
-  <a href="/draw" class="brand" aria-label="兴业银行主题抽奖首页"><img class="brand-logo" src="/draw/images/cib-logo.png" width="584" height="192" alt="兴业银行 INDUSTRIAL BANK CO., LTD." fetchpriority="high"><span class="brand-divider"></span><span class="brand-event">心意礼遇</span></a>
+  <div class="brand"><a href="https://www.cib.com.cn/" class="brand-home" aria-label="兴业银行官网" target="_blank" rel="noopener noreferrer"><img class="brand-logo" src="/draw/images/cib-logo.png" width="584" height="192" alt="兴业银行 INDUSTRIAL BANK CO., LTD." fetchpriority="high"></a><span class="brand-divider" aria-hidden="true"></span><a class="brand-event" href="https://yangzy723.pages.dev/draw">心意礼遇</a></div>
   <button class="settings-button" id="open-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/></svg><span>活动设置</span></button>
 </header>
 <main class="wrap">
@@ -20,25 +20,25 @@
     <div><p class="eyebrow"><span></span> A LITTLE LUCK, A LOVELY DAY</p><h1 id="page-title">兴享好礼<span>，</span>幸运有你<span>。</span></h1><p class="intro-copy">把一份小惊喜，装进今天的好心情。</p></div>
     <div class="intro-seal" aria-hidden="true"><span>GOOD THINGS</span><b>好礼<br>相伴</b><span>COME YOUR WAY</span></div>
   </section>
-  <div class="cloud-status" role="status"><span id="cloud-message">正在连接云端奖池…</span><button type="button" id="retry-sync" hidden>重新连接</button></div>
+  <div class="cloud-status" role="status"><span id="cloud-message">好礼准备中…</span><button type="button" id="retry-sync" hidden>重试</button></div>
   <div class="draw-layout">
     <section class="stage" aria-labelledby="stage-heading">
-      <div class="stage-top"><span id="stage-heading">你的幸运时刻</span><span class="stage-tag"><i></i> READY FOR YOU</span></div>
+      <div class="stage-top"><span id="stage-heading">你的幸运时刻</span><span class="stage-tag"><i></i><span id="stage-status">期待你的幸运</span></span></div>
       <div class="stage-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="spark spark-one">✦</span><span class="spark spark-two">✧</span><span class="spark spark-three">✦</span><div id="hero-art"></div><div class="art-platform"></div></div>
       <div class="result" aria-live="polite" aria-atomic="true"><p id="result-kicker">一份幸运 · 一份心意</p><h2 id="result-title">下一份惊喜，属于你</h2><p id="result-detail">点击下方按钮，开启你的专属好礼</p></div>
       <button class="draw-button" id="draw-button"><span aria-hidden="true">✦</span><span id="draw-label">开启幸运</span><span aria-hidden="true">↗</span></button>
-      <p class="stage-note" id="stage-note">每个浏览器限抽一次 · 好礼为你留存</p>
+      <p class="stage-note" id="stage-note">每名参与用户限抽一次</p>
     </section>
     <section class="prizes-panel" aria-labelledby="prizes-heading">
       <div class="section-heading"><div><p class="eyebrow">THE GIFT COLLECTION</p><h2 id="prizes-heading">日常小美好<span id="prize-count">6 款心意</span></h2></div><span class="collection-number" aria-hidden="true">01—06</span></div>
       <p class="section-copy">实用的、贴心的，都是为你准备的。</p>
       <div class="prize-grid" id="prize-grid"></div>
-      <div class="pool-empty" id="pool-empty" hidden><span aria-hidden="true">✧</span><h3>好礼正在准备中</h3><p>在活动设置中开启至少一款礼品，就能开始抽奖。</p><button class="secondary" id="empty-settings">选择参与礼品</button></div>
-      <div class="collection-foot"><span><i></i> 每款已开启礼品，中奖机会相同</span><span>小物件 · 大心意</span></div>
+      <div class="pool-empty" id="pool-empty" hidden><span aria-hidden="true">✧</span><h3>好礼正在准备中</h3><p>惊喜即将就位，敬请期待。</p><button class="secondary" id="empty-settings">活动管理</button></div>
+      <div class="collection-foot"><span><i></i> 每款礼品，中奖机会相同</span><span>小物件 · 大心意</span></div>
     </section>
   </div>
   <section class="history" aria-labelledby="history-heading"><div class="history-heading"><h2 id="history-heading">幸运留影 <span>LUCKY MOMENTS</span></h2><span>你的记录 · 仅自己可见</span></div><div id="history-list" class="history-list"><p class="history-empty">第一份幸运，等你来开启。</p></div></section>
-  <details class="rules"><summary>关于这份幸运 <span aria-hidden="true">＋</span></summary><p>每个浏览器凭匿名 Cookie 参与一次，由云端从已开启的礼品中等概率抽取 1 份，不扣减库存。刷新页面可查看原结果。本次结果以开始抽奖时的云端奖池为准。活动开关和礼品设置全局共享，只有通过密码验证的管理员可以修改。云端只保存匿名凭证的哈希及对应结果，不收集姓名、手机号。个人记录不向其他访客公开；清除 Cookie 或换浏览器将无法识别为同一位参与者。每份内容以页面展示和活动现场安排为准。</p></details>
+  <details class="rules"><summary>关于这份幸运 <span aria-hidden="true">＋</span></summary><p>每名参与用户限抽一次，每次随机获得一份好礼，各款礼品中奖机会相同。抽奖结束后，可在本页查看中奖结果。礼品款式及领取安排以活动现场为准。</p></details>
 </main>
 <footer class="wrap"><span>兴享好礼 · 让美好发生</span><span>EVERYDAY, A LITTLE MORE JOY.</span></footer>
 <dialog id="settings" aria-labelledby="settings-title">
