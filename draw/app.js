@@ -24,10 +24,11 @@ const iconNames = {book:'计划本', tissue:'抽纸', bag:'垃圾袋', stand:'�
 
 let config = {activityEnabled:false,showQuantity:true,gifts:[]}, history = [], drawing = false, toastTimer, photoSequence = 0;
 
+let receipt = null, participationReady = false;
 let revision = 0, cloudReady = false, starting = false, saving = false, openingSettings = false;
 let syncController, syncEpoch = 0, syncTask, editorRevision = 0;
 function controls() {
-  $('draw-button').disabled = drawing || starting || saving || openingSettings || !cloudReady || !config.activityEnabled || !config.gifts.some(g=>g.enabled);
+  $('draw-button').disabled = drawing || starting || saving || openingSettings || !cloudReady || !participationReady || !!receipt || !config.activityEnabled || !config.gifts.some(g=>g.enabled);
   $('open-settings').disabled = drawing || starting || saving || openingSettings;
 }
 function cloudStatus(message, failed=false) {
@@ -65,8 +66,16 @@ async function syncConfig(force=false) {
     try {
       const value=await api('config',{signal:controller.signal,headers:cloudReady?{'If-None-Match':`"draw-config-${revision}"`}:{}});
       if(epoch!==syncEpoch) return;
+      // Serialize first-visit cookie creation across tabs when Web Locks is available.
+      const loadParticipation=()=>api('participation',{signal:controller.signal});
+      const participation=await (navigator.locks ? navigator.locks.request('draw-visitor',loadParticipation) : loadParticipation());
+      if(epoch!==syncEpoch) return;
+      participationReady=true;
+      receipt=participation.result;
+      if(receipt) rememberResult(receipt);
       if(value) snapshot(value);
       else { cloudReady=true; cloudStatus(config.activityEnabled?'云端奖池已同步 · 所有设备共享':'活动已暂停 · 所有设备同步'); controls(); }
+      if(receipt) showReceipt();
     } catch(error) {
       if(epoch!==syncEpoch) return;
       cloudReady=false; cloudStatus('暂未连接云端，重新连接后即可抽奖',true); controls();
@@ -137,7 +146,28 @@ function renderPool() {
   controls();
   resetResult();
 }
+function rememberResult(result) {
+  const item={name:result.winner.name,icon:result.winner.icon,portion:result.showQuantity?portion(result.winner):'',time:result.time};
+  if(!history.some(old=>old.time===item.time && old.name===item.name)) {
+    history.unshift(item); history=history.slice(0,12);
+    try { localStorage.setItem(HISTORY_KEY,JSON.stringify(history)); }
+    catch (_) { toast('结果已由云端保存，本机记录暂时无法保存。'); }
+    renderHistory();
+  }
+}
+function showReceipt() {
+  const winner=receipt.winner;
+  document.querySelector('.stage').classList.add('won');
+  $('hero-art').replaceChildren(art(winner.icon));
+  $('result-kicker').textContent='你的专属好礼 · 已参与';
+  $('result-title').textContent=winner.name;
+  $('result-detail').textContent=[receipt.showQuantity?portion(winner):'',winner.note].filter(Boolean).join(' · ');
+  $('draw-label').textContent='已参与抽奖';
+  for(const card of $('prize-grid').children) card.classList.toggle('winner',card.dataset.id===winner.id);
+  controls();
+}
 function resetResult() {
+  if(receipt) { showReceipt(); return; }
   document.querySelector('.stage').classList.remove('won');
   $('hero-art').replaceChildren(art('gift'));
   $('result-kicker').textContent = '一份幸运 · 一份心意';
@@ -166,12 +196,13 @@ function celebrate() {
   setTimeout(() => $('confetti').replaceChildren(),1400);
 }
 async function draw() {
-  if (drawing || starting || saving || openingSettings || !cloudReady || $('settings').open || $('auth-dialog').open) return;
+  if (drawing || starting || saving || openingSettings || !cloudReady || !participationReady || !!receipt || $('settings').open || $('auth-dialog').open) return;
   starting=true; stopSync(); controls(); $('draw-label').textContent='正在确认云端奖池…';
   let result;
   try {
     result=await api('draw',{method:'POST'});
     snapshot(result);
+    if(result.alreadyDrawn) { receipt=result; rememberResult(result); starting=false; showReceipt(); return; }
   } catch(error) {
     if(error.data?.config) snapshot(error.data);
     else { cloudReady=false; cloudStatus('抽奖未完成，请重新连接后再试',true); }
@@ -201,17 +232,7 @@ async function draw() {
     if(finished) return; finished = true;
     clearTimeout(fallback); cancelAnimationFrame(frame); select(index);
     stage.classList.remove('drawing'); stage.classList.add('won'); cards[index].classList.add('winner');
-    $('hero-art').replaceChildren(art(winner.icon));
-    $('result-kicker').textContent = '恭喜你，收获一份小美好';
-    $('result-title').textContent = winner.name;
-    const bundle = config.showQuantity ? portion(winner) : '';
-    $('result-detail').textContent = [bundle,winner.note].filter(Boolean).join(' · ');
-    $('draw-label').textContent = '再开启一份幸运';
-    history.unshift({name:winner.name, icon:winner.icon, portion:bundle, time:result.time});
-    history = history.slice(0,12);
-    try { localStorage.setItem(HISTORY_KEY,JSON.stringify(history)); }
-    catch (_) { toast('本次结果已揭晓，但记录未能保存到浏览器。'); }
-    renderHistory(); drawing = false; controls();
+    receipt=result; rememberResult(result); drawing=false; showReceipt();
     if (!reduced) celebrate();
   };
   const tick = now => {

@@ -1,5 +1,7 @@
 import { DRAW_DEFAULTS, validateDrawConfig } from './model.js';
 
+const VISITOR_COOKIE = '__Host-draw_visitor';
+const visitorToken = request => (request.headers.get('Cookie') || '').split(';').map(x=>x.trim()).find(x=>x.startsWith(VISITOR_COOKIE+'='))?.slice(VISITOR_COOKIE.length+1);
 const COOKIE = '__Host-draw_admin';
 const SELECT = 'SELECT revision, config, updated_at FROM draw_config WHERE id = 1';
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
@@ -14,6 +16,7 @@ async function database(binding) {
   if (!initialized.has(binding)) {
     const ready = (async () => {
       await db.prepare('CREATE TABLE IF NOT EXISTS draw_config (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL, config TEXT NOT NULL, updated_at TEXT NOT NULL)').run();
+      await db.prepare('CREATE TABLE IF NOT EXISTS draw_visitors (id TEXT PRIMARY KEY, result TEXT)').run();
       await db.prepare('CREATE TABLE IF NOT EXISTS draw_auth_attempts (id TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)').run();
       await db.prepare('INSERT OR IGNORE INTO draw_config (id, revision, config, updated_at) VALUES (1, 1, ?, ?)')
         .bind(JSON.stringify(DRAW_DEFAULTS),new Date().toISOString()).run();
@@ -68,7 +71,7 @@ function pick(count) {
 
 export async function drawAPI(request,env) {
   const path = new URL(request.url).pathname, method = request.method;
-  const methods = path === '/draw/api/config' ? ['GET','PUT'] : path === '/draw/api/auth' ? ['GET','POST','DELETE'] : path === '/draw/api/draw' ? ['POST'] : [];
+  const methods = path === '/draw/api/config' ? ['GET','PUT'] : path === '/draw/api/auth' ? ['GET','POST','DELETE'] : path === '/draw/api/draw' ? ['POST'] : path === '/draw/api/participation' ? ['GET'] : [];
   if(!methods.length) return json({error:'接口不存在'},404);
   if(!methods.includes(method)) return json({error:'不支持的请求方法'},405,{Allow:methods.join(', ')});
   if(method !== 'GET') {
@@ -111,13 +114,33 @@ export async function drawAPI(request,env) {
       if(!row) return json({error:'其他管理员已更新奖池。你的修改已保留，请加载最新版后再修改。',code:'CONFLICT',...data(await db.prepare(SELECT).first())},409);
       return json(data(row));
     }
+    let visitor, visitorId;
+    if(path === '/draw/api/participation' || path === '/draw/api/draw') {
+      const token = visitorToken(request);
+      if(/^[a-f0-9]{64}$/.test(token || '')) {
+        visitorId = await digest(token);
+        visitor = await db.prepare('SELECT result FROM draw_visitors WHERE id = ?').bind(visitorId).first();
+      }
+      if(path === '/draw/api/participation') {
+        if(visitor) return json({result:visitor.result ? JSON.parse(visitor.result) : null});
+        const token = hex(crypto.getRandomValues(new Uint8Array(32)));
+        await db.prepare('INSERT INTO draw_visitors (id, result) VALUES (?, NULL)').bind(await digest(token)).run();
+        return json({result:null},200,{'Set-Cookie':`${VISITOR_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`});
+      }
+      if(!visitor) return json({error:'请允许本站 Cookie，并刷新页面后再试',code:'VISITOR_REQUIRED'},401);
+    }
     const current = data(await db.prepare(SELECT).first());
     if(path === '/draw/api/draw') {
+      if(visitor.result) return json({...current,...JSON.parse(visitor.result),alreadyDrawn:true});
       if(!current.config.activityEnabled) return json({error:'活动已暂停，请稍后再来',code:'PAUSED',...current},409);
       const gifts = current.config.gifts.filter(gift => gift.enabled);
       if(!gifts.length) return json({error:'好礼正在准备中，请稍后再来',code:'EMPTY',...current},409);
-      // One primary read defines this draw's snapshot. No personal results are stored on the server.
-      return json({...current,winner:gifts[pick(gifts.length)],time:Date.now()});
+      const result = {winner:gifts[pick(gifts.length)],time:Date.now(),showQuantity:current.config.showQuantity};
+      // Only one concurrent request may claim this anonymous credential.
+      const claimed = await db.prepare('UPDATE draw_visitors SET result = ? WHERE id = ? AND result IS NULL RETURNING result')
+        .bind(JSON.stringify(result),visitorId).first();
+      const stored = claimed || await db.prepare('SELECT result FROM draw_visitors WHERE id = ?').bind(visitorId).first();
+      return json({...current,...JSON.parse(stored.result),alreadyDrawn:!claimed});
     }
     const etag = `"draw-config-${current.revision}"`;
     if(request.headers.get('If-None-Match') === etag) return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'no-store'}});

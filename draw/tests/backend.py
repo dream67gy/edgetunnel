@@ -20,6 +20,7 @@ class Backend:
           globalThis.Response = class extends NativeResponse {
             constructor(body, init) { super(body,init); Object.defineProperty(this,'headers',{value:new Headers(init?.headers)}); }
           };
+          globalThis.originalRandom = crypto.getRandomValues.bind(crypto);
           globalThis.api = (await import('/draw/api.js')).drawAPI;
           globalThis.env = { DRAW_ADMIN_PASSWORD: 'test-only-secret', EAT_DB: {
             withSession(mode) {

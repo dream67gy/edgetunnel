@@ -50,7 +50,9 @@ with sync_playwright() as p:
 
     # Exercise every prize through real draw events. A repeated click cannot add a second result.
     for index in range(6):
-        backend.page.evaluate('index => { crypto.getRandomValues = array => { array[0] = index; return array; }; }', index)
+        page.context.clear_cookies(name='__Host-draw_visitor')
+        page.evaluate('syncConfig(true)')
+        backend.page.evaluate('index => { crypto.getRandomValues = array => { if(array instanceof Uint32Array) { array[0] = index; return array; } return originalRandom(array); }; }', index)
         page.evaluate('''index => {
 
           document.getElementById('draw-button').click();
@@ -84,6 +86,8 @@ with sync_playwright() as p:
     page.reload()
     expect(page.locator('.prize-card')).to_have_count(1)
     expect(page.locator('.history-item')).to_have_count(6)
+    page.context.clear_cookies(name='__Host-draw_visitor')
+    page.evaluate('syncConfig(true)')
     page.locator('#draw-button').click()
     page.wait_for_function('!drawing && history.length === 7')
     expect(page.locator('#result-title')).to_have_text('维达联名抽纸')
@@ -126,12 +130,13 @@ with sync_playwright() as p:
 
     # Fresh configurations at mobile/tablet/desktop widths, including maximum-length copy.
     for width in (320, 390, 768, 1440):
+        page.context.clear_cookies(name='__Host-draw_visitor')
         page.set_viewport_size({'width': width, 'height': 1000})
         page.evaluate('''() => {
           localStorage.removeItem(HISTORY_KEY);
         }''')
         backend.page.evaluate('async () => { const {DRAW_DEFAULTS}=await import("/draw/model.js"); await sql("UPDATE draw_config SET config = ?, revision = revision + 1 WHERE id = 1",[JSON.stringify(DRAW_DEFAULTS)]); }')
-        backend.page.evaluate('() => { crypto.getRandomValues = array => { array[0] = 0; return array; }; }')
+        backend.page.evaluate('() => { crypto.getRandomValues = array => { if(array instanceof Uint32Array) { array[0] = 0; return array; } return originalRandom(array); }; }')
         page.reload()
         page.wait_for_function('document.querySelectorAll(".prize-card").length === 6')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), width
@@ -148,7 +153,6 @@ with sync_playwright() as p:
         expect(page.locator('#settings')).not_to_be_visible()
         expect(page.locator('#draw-button')).to_be_enabled()
         page.evaluate('''() => {
-          crypto.getRandomValues = array => { array[0] = 0; return array; };
           window.geometry = () => ['.stage', '.result', '#draw-button', '.prizes-panel'].flatMap(selector => {
             const box = document.querySelector(selector).getBoundingClientRect();
             return [box.width, box.height, box.top + scrollY];
@@ -164,6 +168,7 @@ with sync_playwright() as p:
         page.evaluate('watching = false; samples.push(geometry())')
         assert page.evaluate('samples.every(s => s.every((v,i) => Math.abs(v-baseline[i]) < 1))'), width
         if width == 390:
+            page.context.clear_cookies(name='__Host-draw_visitor')
             page.evaluate('localStorage.removeItem(HISTORY_KEY)')
             page.reload()
             expect(page.locator('#draw-button')).to_be_enabled()
@@ -173,6 +178,7 @@ with sync_playwright() as p:
             page.wait_for_function('!drawing && history.length === 1')
             page.screenshot(path=str(previews / 'draw-result.png'), full_page=True)
 
+    page.context.clear_cookies(name='__Host-draw_visitor')
     # Legacy local configuration cannot override cloud state.
     page.evaluate("localStorage.setItem('cib-draw-config-v1', '{broken')")
     page.reload()
