@@ -35,7 +35,7 @@ jobs:
           python3 eat/build.py
           python3 eat/build.py --mode standalone
       - name: Check adapter isolation and deterministic builds
-        run: node --test eat/tests/test_worker.mjs
+        run: node --test eat/tests/test_worker.mjs draw/tests/test_weights.mjs
       - name: Install browser test dependencies
         run: |
           python3 -m pip install -r eat/tests/requirements.txt

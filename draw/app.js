@@ -64,7 +64,7 @@ async function syncConfig(force=false, checkParticipation=true) {
   const timer=setTimeout(()=>controller.abort(),10000);
   const task=(async()=>{
     try {
-      const value=await api('config',{signal:controller.signal,headers:cloudReady?{'If-None-Match':`"draw-config-${revision}"`}:{}});
+      const value=await api('config',{signal:controller.signal,headers:cloudReady?{'If-None-Match':`"draw-config-weighted-v1-${revision}"`}:{}});
       if(epoch!==syncEpoch) return;
       // Routine polling only needs the shared configuration. Check personal state
       // on entry, foreground return, explicit refresh, or recovery from failure.
@@ -267,6 +267,9 @@ function editor(gift) {
   const icon = document.createElement('select'); icon.name = 'icon';
   Object.entries(iconNames).forEach(([value,text]) => { const option = el('option','',text); option.value = value; icon.append(option); }); icon.value = gift.icon;
   fields.append(field('礼品名称',name),field('展示图片',icon),field('每份数量',quantity),field('单位',input('unit',gift.unit,6)));
+  const weight=input('weight',gift.weight ?? 20,4);
+  weight.type='number'; weight.min='1'; weight.max='9999'; weight.step='1';
+  fields.append(field('抽取权重',weight));
   const note = field('一句介绍（可选）',input('note',gift.note,64)); note.className = 'editor-note';
   row.append(top,fields,note); return row;
 }
@@ -318,7 +321,7 @@ $('settings-form').onsubmit = async event => {
     const gifts = [...$('gift-editors').children].map(row => {
       const get = name => row.querySelector(`[name="${name}"]`);
       return {id:row.dataset.id,name:get('name').value.trim(),note:get('note').value.trim(),
-        icon:get('icon').value,quantity:Number(get('quantity').value),unit:get('unit').value.trim(),enabled:get('enabled').checked};
+        icon:get('icon').value,weight:Number(get('weight').value),quantity:Number(get('quantity').value),unit:get('unit').value.trim(),enabled:get('enabled').checked};
     });
     const next = validateDrawConfig({activityEnabled:$('activity-enabled').checked,showQuantity:$('show-quantity').checked,gifts});
     saving=true; stopSync(); controls();

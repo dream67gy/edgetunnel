@@ -19,7 +19,7 @@ with sync_playwright() as p:
     assert api(method='DELETE')['status']==405
     current=api()['data']
     assert len(current['config']['gifts'])==6
-    assert api(headers={'If-None-Match':'"draw-config-1"'})['status']==304
+    assert api(headers={'If-None-Match':'"draw-config-weighted-v1-1"'})['status']==304
     assert api(method='PUT',data=current)['status']==401
     assert api('auth','POST',{'password':'test-only-secret'}, {'Content-Type':'application/json','Origin':'https://elsewhere.test'})['status']==403
     assert api('auth','POST',{'password':'wrong'})['status']==401

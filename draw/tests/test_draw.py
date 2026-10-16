@@ -52,7 +52,7 @@ with sync_playwright() as p:
     for index in range(6):
         page.context.clear_cookies(name='__Host-draw_visitor')
         page.evaluate('syncConfig(true)')
-        backend.page.evaluate('index => { crypto.getRandomValues = array => { if(array instanceof Uint32Array) { array[0] = index; return array; } return originalRandom(array); }; }', index)
+        backend.page.evaluate('index => { crypto.getRandomValues = array => { if(array instanceof Uint32Array) { array[0] = [0,30,54,70,90,110][index]; return array; } return originalRandom(array); }; }', index)
         page.evaluate('''index => {
 
           document.getElementById('draw-button').click();

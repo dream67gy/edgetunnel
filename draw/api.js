@@ -1,4 +1,4 @@
-import { DRAW_DEFAULTS, validateDrawConfig } from './model.js';
+import { DRAW_DEFAULTS, validateDrawConfig, pickDrawGift } from './model.js';
 
 const VISITOR_COOKIE = '__Host-draw_visitor';
 const visitorToken = request => (request.headers.get('Cookie') || '').split(';').map(x=>x.trim()).find(x=>x.startsWith(VISITOR_COOKIE+'='))?.slice(VISITOR_COOKIE.length+1);
@@ -135,14 +135,14 @@ export async function drawAPI(request,env) {
       if(!current.config.activityEnabled) return json({error:'活动已暂停，请稍后再来',code:'PAUSED',...current},409);
       const gifts = current.config.gifts.filter(gift => gift.enabled);
       if(!gifts.length) return json({error:'好礼正在准备中，请稍后再来',code:'EMPTY',...current},409);
-      const result = {winner:gifts[pick(gifts.length)],time:Date.now(),showQuantity:current.config.showQuantity};
+      const result = {winner:pickDrawGift(gifts,pick),time:Date.now(),showQuantity:current.config.showQuantity};
       // Only one concurrent request may claim this anonymous credential.
       const claimed = await db.prepare('UPDATE draw_visitors SET result = ? WHERE id = ? AND result IS NULL RETURNING result')
         .bind(JSON.stringify(result),visitorId).first();
       const stored = claimed || await db.prepare('SELECT result FROM draw_visitors WHERE id = ?').bind(visitorId).first();
       return json({...current,...JSON.parse(stored.result),alreadyDrawn:!claimed});
     }
-    const etag = `"draw-config-${current.revision}"`;
+    const etag = `"draw-config-weighted-v1-${current.revision}"`;
     if(request.headers.get('If-None-Match') === etag) return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'no-store'}});
     return json(current,200,{ETag:etag});
   } catch(error) {
