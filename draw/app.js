@@ -56,7 +56,7 @@ function snapshot(value) {
   controls();
 }
 function stopSync() { syncEpoch++; syncController?.abort(); syncTask=null; }
-async function syncConfig(force=false) {
+async function syncConfig(force=false, checkParticipation=true) {
   if(!force && (drawing || starting || saving || openingSettings || $('settings').open || $('auth-dialog').open)) return;
   if(syncTask && !force) return syncTask;
   stopSync(); const epoch=syncEpoch;
@@ -66,13 +66,16 @@ async function syncConfig(force=false) {
     try {
       const value=await api('config',{signal:controller.signal,headers:cloudReady?{'If-None-Match':`"draw-config-${revision}"`}:{}});
       if(epoch!==syncEpoch) return;
-      // Serialize first-visit cookie creation across tabs when Web Locks is available.
-      const loadParticipation=()=>api('participation',{signal:controller.signal});
-      const participation=await (navigator.locks ? navigator.locks.request('draw-visitor',loadParticipation) : loadParticipation());
-      if(epoch!==syncEpoch) return;
-      participationReady=true;
-      receipt=participation.result;
-      if(receipt) rememberResult(receipt);
+      // Routine polling only needs the shared configuration. Check personal state
+      // on entry, foreground return, explicit refresh, or recovery from failure.
+      if(checkParticipation || !participationReady || !cloudReady) {
+        const loadParticipation=()=>api('participation',{signal:controller.signal});
+        const participation=await (navigator.locks ? navigator.locks.request('draw-visitor',loadParticipation) : loadParticipation());
+        if(epoch!==syncEpoch) return;
+        participationReady=true;
+        receipt=participation.result;
+        if(receipt) rememberResult(receipt);
+      }
       if(value) snapshot(value);
       else { cloudReady=true; cloudStatus(config.activityEnabled?'好礼已就绪':'活动暂时休息'); controls(); }
       if(receipt) showReceipt();
@@ -342,8 +345,19 @@ $('add-gift').onclick = () => {
 $('open-settings').onclick = openSettings; $('empty-settings').onclick = openSettings;
 $('close-settings').onclick = $('cancel-settings').onclick = () => { if(!saving) $('settings').close(); };
 $('draw-button').onclick = draw;
-$('retry-sync').onclick=()=>syncConfig();
+$('retry-sync').onclick=()=>syncConfig(true).catch(()=>{});
 renderPool(); renderHistory(); syncConfig();
-setInterval(()=>{if(!document.hidden) syncConfig();},8000);
-window.addEventListener('focus',()=>syncConfig());
-document.addEventListener('visibilitychange',()=>{if(!document.hidden) syncConfig();});
+function autoSync(checkParticipation=false) {
+  if(document.hidden || receipt) return;
+  return syncConfig(false,checkParticipation);
+}
+// Stagger devices to avoid a synchronized burst; completed visitors make no polls.
+setInterval(()=>autoSync(),60000+Math.floor(Math.random()*15000));
+let foregroundTimer;
+function foregroundSync() {
+  clearTimeout(foregroundTimer);
+  if(document.hidden || receipt) return;
+  foregroundTimer=setTimeout(()=>autoSync(true),250);
+}
+window.addEventListener('focus',foregroundSync);
+document.addEventListener('visibilitychange',foregroundSync);
