@@ -15,6 +15,8 @@
 构建只读取发布副本，缺失文件时直接报错，不生成不能播放的占位页面。音频使用带内容哈希的文件名；替换音频后会自动生成新地址。
 `/music` 和 `/music/*` 在 `_routes.json` 中排除 Worker，页面、脚本、音频直接由 Pages 静态托管。音频不进入 Worker 包，也不使用 D1/KV。单文件最多 25 MiB，见 [Pages 限制](https://developers.cloudflare.com/pages/platform/limits/)。
 
-播放器使用浏览器原生控件，点击后才加载音频（`preload="none"`）。页面不强制自动播放，避免手机浏览器阻止；支持暂停、进度拖动、重听和失败重试。唱片动画只在播放且页面可见时运行，尊重系统减少动态效果偏好。
+播放器使用统一的大按钮与原生 range 进度条，触控区域至少 44px，支持触摸和键盘操作；脚本未加载时保留浏览器原生播放器。点击后才加载音频（`preload="none"`），不强制自动播放。支持暂停、进度拖动、重听和失败重试，页面离开时暂停。手机竖屏为纵向布局，桌面和较宽横屏为左右布局，适配安全区域。唱片旋转、星光和音量柱只在播放且页面可见时运行，尊重系统减少动态效果偏好。
 
 验证：`node --test eat/tests/test_worker.mjs`；安装已有 Playwright 依赖后运行 `python3 music/tests/test_music.py`（可通过 `CHROME_BIN` 指定 Chrome）。
+
+兼容性回归：安装 `python3 -m playwright install --with-deps chromium webkit` 后，运行 `MUSIC_TEST_WEBKIT=1 python3 music/tests/test_music.py`。测试使用桌面 Chrome / Playwright WebKit 和触屏视口模拟；不等同于实体 iPhone、Android 或微信内置浏览器实机验证。

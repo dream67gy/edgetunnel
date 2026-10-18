@@ -39,7 +39,7 @@ jobs:
       - name: Install browser test dependencies
         run: |
           python3 -m pip install -r eat/tests/requirements.txt
-          python3 -m playwright install --with-deps chromium
+          python3 -m playwright install --with-deps chromium webkit
       - name: Check shared storage and responsive UI
         run: |
           export CHROME_BIN="$(python3 -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
@@ -50,7 +50,7 @@ jobs:
           python3 draw/tests/test_draw.py
           python3 draw/tests/test_shared.py
           python3 draw/tests/test_polling.py
-          python3 music/tests/test_music.py
+          MUSIC_TEST_WEBKIT=1 python3 music/tests/test_music.py
       - uses: actions/upload-artifact@v4
         with:
           name: eat-pages-builds
