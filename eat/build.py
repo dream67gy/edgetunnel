@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import runpy
 import shutil
 from pathlib import Path
 
@@ -14,8 +15,8 @@ def build(mode='combined', output=None):
     target = Path(output).resolve() if output else ROOT / 'dist' / mode
     # Replace only owned build directories, never either application's source tree.
     modules = target / '_worker.js'
-    if target == ROOT or any(target == source or source in target.parents for source in (APP, ROOT / 'draw')):
-        raise ValueError('Use an output directory outside the eat and draw source directories')
+    if target == ROOT or any(target == source or source in target.parents for source in (APP, ROOT / 'draw', ROOT / 'music')):
+        raise ValueError('Use an output directory outside the application source directories')
     inputs = ['worker.js', 'api.js', 'index.html', 'app.js', 'styles.css']
     if mode == 'combined':
         if not (ROOT / '_worker.js').is_file():
@@ -87,8 +88,9 @@ def build(mode='combined', output=None):
     photo_output.mkdir(parents=True, exist_ok=True)
     for original, versioned in photo_names.items():
         shutil.copyfile(draw / 'images' / original, photo_output / versioned)
-    (target / '_routes.json').write_text(json.dumps({'version':1, 'include':['/*'], 'exclude':['/draw/images/*']}) + '\n')
-    (target / '_headers').write_text('/draw/images/*\n  Cache-Control: public, max-age=31536000, immutable\n  X-Content-Type-Options: nosniff\n')
+    runpy.run_path(str(ROOT / 'music/build.py'))['build_music'](target)
+    (target / '_routes.json').write_text(json.dumps({'version':1, 'include':['/*'], 'exclude':['/draw/images/*', '/music', '/music/*']}) + '\n')
+    (target / '_headers').write_text('/draw/images/*\n  Cache-Control: public, max-age=31536000, immutable\n  X-Content-Type-Options: nosniff\n/music/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n  X-Content-Type-Options: nosniff\n')
     # A tiny static fallback; all live requests are handled by the Worker.
     (target / '404.html').write_text('<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>\n')
     return target

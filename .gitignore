@@ -38,3 +38,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 log/
+
+# Music quiz originals stay local; only prepared music/audio/*.mp3 are deployed.
+/music/*.mp3
+/music/*.wav
+/music/*.m4a
+/music/*.flac
+/music/originals/
+/music/.cache/
+__pycache__/

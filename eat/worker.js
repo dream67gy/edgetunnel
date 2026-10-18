@@ -13,6 +13,11 @@ export async function handleEat(request, env) {
   const {
     pathname
   } = new URL(request.url);
+  if (/^\/Test-[A-D]\/?$/.test(pathname) && ['GET','HEAD'].includes(request.method)) {
+    const destination = new URL(request.url);
+    destination.pathname = '/music/' + pathname.split('/')[1] + '/';
+    return Response.redirect(destination.href,302);
+  }
   if (pathname === '/eat/api/pool') return eatPoolAPI(request, env);
   if (pathname.startsWith('/draw/api/')) return drawAPI(request, env);
   const isDraw = pathname === '/draw' || pathname === '/draw/';

@@ -90,7 +90,7 @@ test('draw routes serve the new page in both modes with independent cache valida
       const bytes = await readFile(join(out, 'draw/images', name));
       assert.ok(name.includes(createHash('sha256').update(bytes).digest('hex').slice(0,12)));
     }
-    assert.deepEqual(JSON.parse(await readFile(join(out, '_routes.json'), 'utf8')).exclude, ['/draw/images/*']);
+    assert.deepEqual(JSON.parse(await readFile(join(out, '_routes.json'), 'utf8')).exclude, ['/draw/images/*', '/music', '/music/*']);
     assert.match(await readFile(join(out, '_headers'), 'utf8'), /immutable/);
     const { default: worker } = await import(pathToFileURL(join(modules, 'index.js')));
     const unavailable = await worker.fetch(new Request('https://example.test/draw/api/config'), {}, {});
@@ -189,4 +189,27 @@ test('HTML revalidation skips unchanged content and sends the current page for s
   const head = await worker.fetch(request({}, 'HEAD'), {}, {});
   assert.equal(head.headers.get('ETag'), etag);
   assert.equal(await head.text(), '');
+});
+
+test('music builds four static questions with anonymous media and short URL redirects', async t => {
+  const {modules,out}=await fixture(t,'combined');
+  const {default:worker}=await import(pathToFileURL(join(modules,'index.js')));
+  for(const letter of 'ABCD') {
+    const html=await readFile(join(out,`music/Test-${letter}/index.html`),'utf8');
+    assert.match(html,new RegExp(`题目 ${letter}`));
+    assert.match(html,/preload="none"/);
+    assert.doesNotMatch(html,/autoplay|\{\{/);
+    const path=html.match(/src="(\/music\/assets\/track-[^"]+\.mp3)"/)[1];
+    const bytes=await readFile(join(out,path));
+    assert.ok(bytes.length>0);
+    assert.notEqual(bytes.subarray(0,3).toString(),'ID3');
+    assert.equal(bytes[0],255);
+    for(const method of ['GET','HEAD']) {
+      const response=await worker.fetch(new Request(`https://example.test/Test-${letter}?entry=qr`,{method}),{},{});
+      assert.equal(response.status,302);
+      assert.equal(response.headers.get('Location'),`https://example.test/music/Test-${letter}/?entry=qr`);
+    }
+  }
+  assert.equal((await readdir(join(out,'music/assets'))).filter(name=>name.endsWith('.mp3')).length,4);
+  assert.ok(!(await readdir(modules)).some(name=>name.endsWith('.mp3')));
 });
