@@ -53,6 +53,36 @@ export default {
 			if (env.GO2SOCKS5) SOCKS5白名单 = [...new Set(SOCKS5白名单.concat(await 整理成数组(env.GO2SOCKS5)))];
 			缓存SOCKS5白名单 = SOCKS5白名单;
 		} else SOCKS5白名单 = 缓存SOCKS5白名单;
+				if (访问路径.startsWith('ip-lib/')) {// IP库源：抓取远程列表，域名经 DoH 解析为纯IP后输出（供管理页"IP库导入→测速"使用）
+			const IP库映射 = {
+				'bestcf-all': 'https://bestcf.pages.dev/domain/all.txt',
+				'bestcf-asia': 'https://bestcf.pages.dev/domain/Domain-Asia.txt',
+				'vps789-top100': 'https://bestcf.pages.dev/vps789/top100.txt',
+			};
+			const 源URL = IP库映射[访问路径.slice(7)];
+			if (!源URL) return new Response('未知IP库', { status: 404 });
+			try {
+				const 行列表 = (await (await fetch(源URL)).text()).split(/\r?\n/).map(l => l.trim())
+					.filter(l => /^[^\s#]+:\d+(#.*)?$/.test(l) && !/BestCF\.pages\.dev/i.test(l));
+				const 输出 = [];
+				for (let i = 0; i < 行列表.length; i += 50) { // 分批并发解析，避免瞬时打满
+					await Promise.all(行列表.slice(i, i + 50).map(async 行 => {
+						const [地址端口, ...备注部分] = 行.split('#');
+						const 备注 = 备注部分.length ? '#' + 备注部分.join('#') : '';
+						const 末冒号 = 地址端口.lastIndexOf(':');
+						const 主机 = 地址端口.slice(0, 末冒号), 端口 = 地址端口.slice(末冒号 + 1);
+						if (/^\d{1,3}(\.\d{1,3}){3}$/.test(主机)) { 输出.push(行); return; } // 纯IP直接保留
+						try {
+							const 记录 = await DoH查询(主机, 'A');
+							for (const r of (记录 || []).slice(0, 4)) if (r.type === 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(r.data)) 输出.push(`${r.data}:${端口}${备注}`);
+						} catch { }
+					}));
+				}
+				return new Response([...new Set(输出)].join('\n'), { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+			} catch (error) {
+				return new Response('IP库源获取失败: ' + error.message, { status: 502 });
+			}
+		}
 		if (访问路径 === 'version') {// 版本信息接口
 			const 请求UUID = (url.searchParams.get('uuid') || '').toLowerCase();
 			if (uuidRegex.test(请求UUID)) {
@@ -296,7 +326,18 @@ export default {
 					}
 
 					ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
-					return fetch(Pages静态页面 + '/admin' + url.search);
+										// 拦截管理页HTML，把内置IP库下拉替换为 bestcf 三库（经本站 /ip-lib/ 接口输出纯IP）
+					const 管理页响应 = await fetch(Pages静态页面 + '/admin' + url.search);
+					let 管理页HTML = await 管理页响应.text();
+					管理页HTML = 管理页HTML.replace(/const IP_LIBRARIES = \[[\s\S]*?\];/, `const IP_LIBRARIES = ${JSON.stringify([
+						{ label: "BestCF全网列表v4", family: "ipv4", url: "/ip-lib/bestcf-all" },
+						{ label: "BestCF亚洲列表v4", family: "ipv4", url: "/ip-lib/bestcf-asia" },
+						{ label: "VPS789优选TOP100", family: "ipv4", url: "/ip-lib/vps789-top100" },
+					])};`);
+					const 管理页响应头 = new Headers(管理页响应.headers);
+					管理页响应头.delete('content-encoding'); // body 已解码，避免压缩头不匹配
+					管理页响应头.delete('content-length');
+					return new Response(管理页HTML, { status: 管理页响应.status, headers: 管理页响应头 });
 				} else if (访问路径 === 'logout' || uuidRegex.test(访问路径)) {//清除cookie并跳转到登录页面
 					const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
 					响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
