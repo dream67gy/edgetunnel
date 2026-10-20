@@ -30,5 +30,6 @@ def build_music(target):
         folder=output/f'Test-{letter}'
         folder.mkdir()
         (folder/'index.html').write_text(html)
-    links=''.join(f'<a href="/music/Test-{letter}/">{letter}<small>题目 {letter}</small></a>' for letter in 'ABCD')
+    meta={'A':('01','暖场序曲'),'B':('02','流金旋律'),'C':('03','律动记忆'),'D':('04','压轴猜想')}
+    links=''.join(f'<a href="/music/Test-{letter}/"><span class="q-badge">TRACK {meta[letter][0]}</span><b>{letter}</b><small>题目 {letter} · {meta[letter][1]}</small></a>' for letter in 'ABCD')
     (output/'index.html').write_text('''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#102c63"><title>听歌识曲</title><link rel="stylesheet" href="'''+urls['styles.css']+'''"><main class="quiz"><header><span class="brand">听歌识曲 <span>LISTEN & GUESS</span></span></header><section class="player-card"><p class="eyebrow">FOUR MELODIES, FOUR MEMORIES</p><h1>听一段，猜一首。</h1><p class="intro">选择题目，开启你的音乐挑战。</p><nav class="question-links" aria-label="选择题目">'''+links+'''</nav></section><p class="tip">每道题都有一段旋律，等你来揭开谜底。</p></main></html>''')

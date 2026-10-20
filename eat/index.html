@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#f7f3e9">
-<meta name="description" content="把纠结交给饭点。筛选口味和预算，用一点运气决定下一顿，和朋友共享你的美味奖池。">
+<meta name="theme-color" content="#f5f3ee">
+<meta name="description" content="把纠结交给饭点。筛选口味和预算，用一点运气决定下一顿，和朋友共享你的美味奖池与吃过的美食足迹。">
 <title>饭点事务所 · 今天吃什么</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23de5538'/%3E%3Cstop offset='1' stop-color='%23b83a22'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='12' fill='url(%23g)'/%3E%3Ctext x='20' y='28' text-anchor='middle' font-size='23' font-weight='800' fill='%23fffdf7'%3E食%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="/eat/styles.css">
 </head>
 <body>
@@ -50,8 +51,9 @@
 <p id="result-detail">每家入选店铺，都有同样的机会</p>
 </div>
 <div class="result-actions" id="result-actions" hidden>
-<button class="text-btn" id="locate-result">查看这家 ↗</button>
-<button class="text-btn" id="copy-result">复制饭点</button>
+<button class="text-btn action-pill" id="locate-result">查看这家 ↗</button>
+<button class="text-btn action-pill primary-pill" id="record-winner">记入吃过 ✦</button>
+<button class="text-btn action-pill" id="copy-result">复制饭点</button>
 </div>
 <button class="primary spin-button" id="spin">
 <span>✦</span>
@@ -99,6 +101,18 @@
 <p class="shared-note">奖池由大家共用，修改会同步到所有设备。</p>
 </section>
 </div>
+<section class="meals-section" id="meals-section" aria-label="曾经吃过的食物">
+<div class="meals-head">
+<div>
+<div class="tiny pool-kicker"><span class="section-number">03</span> 共享味蕾记忆 · 持久保存在云端</div>
+<h2>曾经吃过的美味<small id="meals-count">0 顿</small></h2>
+<p class="meals-sub">手动记录每一顿真实吃过的好味道，填写招牌菜与评分，所有设备同步留存。</p>
+</div>
+<button class="add-button meal-add-button" id="add-meal">＋ 记一顿吃过的</button>
+</div>
+<div class="meals-grid" id="meals-list" role="region" aria-label="吃过的食物列表">
+</div>
+</section>
 <section class="history">
 <div class="history-head">
 <div><div class="eyebrow">A LITTLE FOOD DIARY</div><h3>最近的饭点灵感 <span>只记录在这台设备</span></h3></div>
@@ -166,6 +180,70 @@
 <button type="button" class="soft-btn danger" id="delete-shop" hidden>删除店铺</button>
 <button type="button" class="soft-btn" id="cancel-editor">取消</button>
 <button class="primary" type="submit">保存到奖池</button>
+</div>
+</form>
+</dialog>
+<dialog id="meal-editor" aria-labelledby="meal-editor-title" aria-describedby="meal-editor-description">
+<form id="meal-form">
+<div class="editor-mark" id="meal-editor-mark" aria-hidden="true">🍜</div>
+<div class="dialog-head">
+<h2 id="meal-editor-title">记一顿吃过的美味</h2>
+<button type="button" class="icon-btn" id="close-meal-editor" aria-label="关闭">✕</button>
+</div>
+<p id="meal-editor-description">把真正吃过的好味道记下来，留给下一次纠结时参考。</p>
+<label class="field">从奖池快选（可选）<select id="meal-shop-select">
+<option value="">手动输入或自由记录…</option>
+</select>
+</label>
+<div class="form-row">
+<label class="field">店铺 / 食物名称<input id="meal-name" required maxlength="32" placeholder="例如：巷口牛肉面" autocomplete="off">
+</label>
+<label class="field">美味标记<select id="meal-emoji">
+<option value="🍜">🍜 面食</option>
+<option value="🍚">🍚 米饭</option>
+<option value="🥟">🥟 饺子</option>
+<option value="🍲">🍲 火锅 / 汤锅</option>
+<option value="🍔">🍔 汉堡</option>
+<option value="🍕">🍕 披萨</option>
+<option value="🥗">🥗 轻食</option>
+<option value="🍢">🍢 烧烤</option>
+<option value="🥪">🥪 早餐</option>
+<option value="🍣">🍣 日料</option>
+<option value="🍰">🍰 甜点</option>
+<option value="🧋">🧋 饮品</option>
+<option value="🥣">🥣 稀饭 / 粥</option>
+<option value="🥩">🥩 西餐 / 牛排</option>
+<option value="🍝">🍝 意面</option>
+<option value="🍳">🍳 煎蛋 / 早午餐</option>
+<option value="🍛">🍛 咖喱 / 东南亚</option>
+<option value="🥘">🥘 韩餐 / 拌饭</option>
+<option value="🌮">🌮 墨西哥菜</option>
+<option value="🥐">🥐 可颂 / 烘焙</option>
+<option value="🥯">🥯 贝果</option>
+<option value="🦞">🦞 海鲜</option>
+</select>
+</label>
+</div>
+<div class="form-row">
+<label class="field">具体吃了什么菜（可选）<input id="meal-dish" maxlength="48" placeholder="例如：红烧牛腩面 + 卤蛋" autocomplete="off">
+</label>
+<label class="field">美味评分（可选）<select id="meal-rating">
+<option value="">暂不评分</option>
+<option value="5">★★★★★ 惊艳必吃 (5星)</option>
+<option value="4">★★★★☆ 值得回购 (4星)</option>
+<option value="3">★★★☆☆ 中规中矩 (3星)</option>
+<option value="2">★★☆☆☆ 勉强果腹 (2星)</option>
+<option value="1">★☆☆☆☆ 避雷不推 (1星)</option>
+</select>
+</label>
+</div>
+<label class="field">评价 / 用餐感想（可选）<input id="meal-note" maxlength="120" placeholder="例如：汤头很浓郁，分量足，下次可以试试加牛筋">
+</label>
+<p class="editor-message" id="meal-editor-message" role="alert" hidden></p>
+<div class="dialog-actions">
+<button type="button" class="soft-btn danger" id="delete-meal" hidden>删除记录</button>
+<button type="button" class="soft-btn" id="cancel-meal-editor">取消</button>
+<button class="primary" type="submit" id="save-meal-btn">保存到吃过清单</button>
 </div>
 </form>
 </dialog>

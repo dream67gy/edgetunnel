@@ -27,6 +27,10 @@ let state = {
   spinning = false,
   angle = 0,
   editing = null,
+  editingMeal = null,
+  meals = [],
+  mealSaving = false,
+  mealsKey = null,
   toastTimer, confirmAction = null,
   storageBlocked = false,
   syncController = null,
@@ -43,7 +47,28 @@ function toast(message) {
     $('editor-message').textContent = message;
     $('editor-message').hidden = false
   }
+  if ($('meal-editor')?.open) {
+    $('meal-editor-message').textContent = message;
+    $('meal-editor-message').hidden = false
+  }
   toastTimer = setTimeout(() => $('toast').hidden = true, 4200)
+}
+
+function validateMealItem(m) {
+  if (!m || typeof m.id !== 'string' || !m.id || m.id.length > 100 ||
+    typeof m.name !== 'string' || !m.name.trim() || m.name.length > 32 ||
+    !emojis.includes(m.emoji) || !Number.isFinite(m.eatenAt) || m.eatenAt <= 0) return null;
+  const rating = m.rating === null || m.rating === undefined || m.rating === '' ? null : Number(m.rating);
+  return {
+    id: m.id,
+    shopId: typeof m.shopId === 'string' && m.shopId ? m.shopId : null,
+    name: m.name.trim(),
+    emoji: m.emoji,
+    dish: typeof m.dish === 'string' ? m.dish.slice(0, 48) : '',
+    rating: Number.isInteger(rating) && rating >= 1 && rating <= 5 ? rating : null,
+    note: typeof m.note === 'string' ? m.note.slice(0, 120) : '',
+    eatenAt: Math.trunc(m.eatenAt)
+  };
 }
 
 function validate(data) {
@@ -95,6 +120,13 @@ try {
   const cached = localStorage.getItem(KEY + ':cloud');
   if (cached) state = validate(JSON.parse(cached))
 } catch {}
+try {
+  const cachedMeals = localStorage.getItem(KEY + ':meals');
+  if (cachedMeals) {
+    const parsed = JSON.parse(cachedMeals);
+    if (Array.isArray(parsed)) meals = parsed.map(validateMealItem).filter(Boolean).slice(0, 60)
+  }
+} catch {}
 let hadLocal = (() => {
   try {
     return !storageBlocked && !!localStorage.getItem(KEY)
@@ -111,6 +143,58 @@ function persist() {
   } catch {
     return false
   }
+}
+
+function persistMeals() {
+  if (storageBlocked) return false;
+  try {
+    localStorage.setItem(KEY + ':meals', JSON.stringify(meals));
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function mealsRequest(method = 'GET', body, id) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new DOMException('连接超时，请稍后重试', 'TimeoutError')), 12000);
+  try {
+    const url = id ? `/eat/api/meals?id=${encodeURIComponent(id)}` : '/eat/api/meals';
+    const response = await fetch(url, {
+      method,
+      cache: 'no-store',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const error = Error(data.error || '美食记录同步失败');
+      error.data = data;
+      error.status = response.status;
+      throw error
+    }
+    return data
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function applyMeals(list) {
+  if (!Array.isArray(list)) return;
+  meals = list.map(validateMealItem).filter(Boolean);
+  persistMeals()
+}
+
+async function syncMeals() {
+  if (mealSaving) return;
+  try {
+    const data = await mealsRequest('GET');
+    if (data && Array.isArray(data.meals)) {
+      applyMeals(data.meals);
+      renderMeals()
+    }
+  } catch {}
 }
 
 function cloudStatus(message, status = 'ok') {
@@ -184,7 +268,10 @@ async function syncPool(manual = false) {
       render()
     }
     cloudStatus('云端共用 · 已同步');
-    if (manual) toast('共享奖池已更新')
+    if (manual) {
+      toast('共享奖池已更新');
+      void syncMeals()
+    }
   } catch (error) {
     if (controller.signal.aborted && controller.signal.reason?.name !== 'TimeoutError') return;
     cloudStatus(cloudReady ? '同步暂断 · 点击同步重试' : '共享未连接 · 点击同步重试', 'error');
@@ -375,6 +462,11 @@ function render() {
   setText($('wheel-context'), hasFilters() ? [filter !== '全部' ? filter : '', flavor, budget ? '人均 ≤ ¥' + budget : '', query ? '搜索结果' : ''].filter(Boolean).join(' / ') : '每一家，都有被选中的理由。');
   $('spin').disabled = spinning || saving || !list.length;
   $('add').disabled = locked;
+  if ($('add-meal')) $('add-meal').disabled = locked || mealSaving;
+  if ($('meal-form')) {
+    $('meal-form').querySelectorAll('input, select, button').forEach(control => control.disabled = mealSaving);
+    setText($('save-meal-btn'), mealSaving ? '正在保存…' : '保存到吃过清单');
+  }
   $('import').disabled = locked;
   $('migrate').disabled = locked;
   $('sync-now').disabled = spinning || saving || syncing;
@@ -409,6 +501,7 @@ function render() {
   }
   $('cards').querySelectorAll('.shop button, .shop input').forEach(control => control.disabled = locked);
   drawWheel(list);
+  renderMeals();
   renderHistory()
 }
 
@@ -463,6 +556,109 @@ function drawWheel(list) {
     }
   }
   $('wheel').replaceChildren(svg)
+}
+
+function renderMeals() {
+  const listEl = $('meals-list');
+  if (!listEl) return;
+  const locked = spinning || saving || mealSaving || !cloudReady;
+  setText($('meals-count'), meals.length + ' 顿');
+  const nextKey = JSON.stringify([meals, locked]);
+  if (nextKey === mealsKey) return;
+  mealsKey = nextKey;
+  listEl.replaceChildren();
+  if (!meals.length) {
+    const empty = element('div', 'empty meal-empty');
+    empty.append(element('span', 'empty-mark', '🍽️'));
+    empty.append(element('p', '', cloudReady ? '还没有记录吃过的美味。吃到好味道时，随手记一笔吧！' : '连接云端后，即可查看与记录大家吃过的美味。'));
+    if (cloudReady) {
+      const btn = element('button', 'soft-btn', '＋ 记下第一顿美味');
+      btn.disabled = locked;
+      btn.onclick = () => openMealEditor();
+      empty.append(btn)
+    }
+    listEl.append(empty);
+    return
+  }
+  meals.forEach(m => {
+    const card = element('article', 'meal-card');
+    card.dataset.id = m.id;
+    const head = element('div', 'meal-card-head');
+    const icon = element('span', 'meal-icon', m.emoji);
+    const flavorIndex = flavors.findIndex(f => f.icons.includes(m.emoji));
+    icon.style.background = foodColors[flavorIndex] || '#eee8d8';
+    const meta = element('div', 'meal-head-copy');
+    const titleRow = element('div', 'meal-title-row');
+    titleRow.append(element('h3', 'meal-name', m.name));
+    if (m.rating) {
+      const stars = element('span', 'meal-stars', '★'.repeat(m.rating) + '☆'.repeat(5 - m.rating));
+      stars.setAttribute('aria-label', m.rating + ' 星好评');
+      titleRow.append(stars)
+    }
+    const timeStr = new Date(m.eatenAt).toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    meta.append(titleRow, element('time', 'meal-time', timeStr));
+    const editBtn = element('button', 'icon-btn meal-edit-btn', '✎');
+    editBtn.disabled = locked;
+    editBtn.setAttribute('aria-label', '编辑记录 ' + m.name);
+    editBtn.onclick = () => openMealEditor(m);
+    head.append(icon, meta, editBtn);
+    card.append(head);
+    if (m.dish) {
+      const dish = element('div', 'meal-dish');
+      dish.append(element('span', 'meal-dish-tag', '必点 / 菜品'), element('span', '', m.dish));
+      card.append(dish)
+    }
+    if (m.note) {
+      card.append(element('p', 'meal-note', m.note))
+    }
+    listEl.append(card)
+  })
+}
+
+function openMealEditor(meal, presetShop) {
+  if (spinning || saving || mealSaving || !cloudReady) {
+    if (!cloudReady) toast('请先连接共享奖池');
+    return
+  }
+  editingMeal = meal?.id || null;
+  const form = $('meal-form');
+  form.reset();
+  $('meal-name').setCustomValidity('');
+  $('meal-editor-message').hidden = true;
+  const select = $('meal-shop-select');
+  select.replaceChildren(element('option', '', '手动输入或自由记录…'));
+  select.firstChild.value = '';
+  state.shops.forEach(s => {
+    const opt = element('option', '', `${s.emoji} ${s.name}`);
+    opt.value = s.id;
+    select.append(opt)
+  });
+  $('meal-editor-title').textContent = meal ? '修改这顿美食记录' : '记一顿吃过的美味';
+  $('delete-meal').hidden = !meal;
+  if (meal) {
+    select.value = meal.shopId && state.shops.some(s => s.id === meal.shopId) ? meal.shopId : '';
+    $('meal-name').value = meal.name;
+    $('meal-emoji').value = meal.emoji;
+    $('meal-dish').value = meal.dish || '';
+    $('meal-rating').value = meal.rating ? String(meal.rating) : '';
+    $('meal-note').value = meal.note || ''
+  } else if (presetShop) {
+    select.value = presetShop.id && state.shops.some(s => s.id === presetShop.id) ? presetShop.id : '';
+    $('meal-name').value = presetShop.name;
+    $('meal-emoji').value = presetShop.emoji;
+    $('meal-dish').value = '';
+    $('meal-rating').value = '5';
+    $('meal-note').value = presetShop.note || ''
+  }
+  $('meal-editor-mark').textContent = $('meal-emoji').value;
+  $('meal-editor').showModal();
+  (presetShop ? $('meal-dish') : $('meal-name')).focus()
 }
 
 function renderHistory() {
@@ -631,6 +827,82 @@ $('locate-result').onclick = () => {
     block: 'center'
   })
 };
+if ($('record-winner')) {
+  $('record-winner').onclick = () => {
+    if (!lastWinner) return;
+    openMealEditor(null, lastWinner)
+  }
+}
+if ($('add-meal')) {
+  $('add-meal').onclick = () => openMealEditor();
+  $('meal-emoji').onchange = () => $('meal-editor-mark').textContent = $('meal-emoji').value;
+  $('meal-shop-select').onchange = () => {
+    const chosen = state.shops.find(s => s.id === $('meal-shop-select').value);
+    if (chosen) {
+      $('meal-name').value = chosen.name;
+      $('meal-emoji').value = chosen.emoji;
+      $('meal-editor-mark').textContent = chosen.emoji;
+      $('meal-name').setCustomValidity('')
+    }
+  };
+  $('meal-name').oninput = () => $('meal-name').setCustomValidity('');
+  $('close-meal-editor').onclick = $('cancel-meal-editor').onclick = () => $('meal-editor').close();
+  $('meal-editor').addEventListener('cancel', event => {
+    if (mealSaving) event.preventDefault()
+  });
+  $('meal-form').onsubmit = async e => {
+    e.preventDefault();
+    const name = $('meal-name').value.trim();
+    if (!name) {
+      $('meal-name').setCustomValidity('请输入店铺或食物名称');
+      $('meal-name').reportValidity();
+      return
+    }
+    const existing = meals.find(m => m.id === editingMeal);
+    const body = {
+      id: editingMeal || crypto.randomUUID(),
+      shopId: $('meal-shop-select').value || null,
+      name,
+      emoji: $('meal-emoji').value,
+      dish: $('meal-dish').value.trim(),
+      rating: $('meal-rating').value ? Number($('meal-rating').value) : null,
+      note: $('meal-note').value.trim(),
+      eatenAt: existing ? existing.eatenAt : Date.now()
+    };
+    mealSaving = true;
+    render();
+    try {
+      const data = await mealsRequest(editingMeal ? 'PUT' : 'POST', body);
+      applyMeals(data.meals);
+      $('meal-editor').close();
+      toast(editingMeal ? '美食记录已更新' : '已记入吃过清单，所有设备同步留存！')
+    } catch (error) {
+      if (error.data?.meals) applyMeals(error.data.meals);
+      toast(error.message || '保存失败，请稍后重试')
+    } finally {
+      mealSaving = false;
+      render()
+    }
+  };
+  $('delete-meal').onclick = () => {
+    const id = editingMeal;
+    $('meal-editor').close();
+    confirm('删除这条吃过的记录？', '删除后将从云端共享记录中移除。', async () => {
+      mealSaving = true;
+      render();
+      try {
+        const data = await mealsRequest('DELETE', undefined, id);
+        applyMeals(data.meals);
+        toast('已删除这条记录')
+      } catch (error) {
+        toast(error.message || '删除失败，请重试')
+      } finally {
+        mealSaving = false;
+        render()
+      }
+    })
+  }
+}
 $('copy-result').onclick = async () => {
   if (!lastWinner) return;
   const winner = lastWinner;
@@ -744,10 +1016,19 @@ $('import-file').onchange = async e => {
     toast('无法导入：请选择本页面导出的有效 JSON 备份')
   }
 };
-window.addEventListener('focus', () => syncPool());
-window.addEventListener('online', () => syncPool());
+window.addEventListener('focus', () => {
+  syncPool();
+  void syncMeals()
+});
+window.addEventListener('online', () => {
+  syncPool();
+  void syncMeals()
+});
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) syncPool()
+  if (!document.hidden) {
+    syncPool();
+    void syncMeals()
+  }
 });
 setInterval(() => {
   if (!document.hidden) syncPool()
@@ -755,3 +1036,4 @@ setInterval(() => {
 $('today-date').textContent = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
 render();
 syncPool();
+void syncMeals();

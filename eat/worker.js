@@ -1,5 +1,6 @@
 import {
-  eatPoolAPI
+  eatPoolAPI,
+  eatMealsAPI
 } from './api.js';
 import {
   EAT_HTML, EAT_ETAG
@@ -19,6 +20,7 @@ export async function handleEat(request, env) {
     return Response.redirect(destination.href,302);
   }
   if (pathname === '/eat/api/pool') return eatPoolAPI(request, env);
+  if (pathname === '/eat/api/meals') return eatMealsAPI(request, env);
   if (pathname.startsWith('/draw/api/')) return drawAPI(request, env);
   const isDraw = pathname === '/draw' || pathname === '/draw/';
   if ((pathname === '/eat' || pathname === '/eat/' || isDraw) &&

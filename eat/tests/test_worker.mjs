@@ -41,6 +41,9 @@ async function fixture(t, mode) {
   const api = await worker.fetch(new Request('https://example.test/eat/api/pool'), {}, {});
   assert.equal(api.status, 503);
   assert.equal((await api.json()).code, 'NOT_CONFIGURED');
+  const mealsApi = await worker.fetch(new Request('https://example.test/eat/api/meals'), {}, {});
+  assert.equal(mealsApi.status, 503);
+  assert.equal((await mealsApi.json()).code, 'NOT_CONFIGURED');
 });
 
  test('adapter forwards untouched requests and preserves upstream exports/handlers', async t => {
