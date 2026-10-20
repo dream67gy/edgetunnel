@@ -38,6 +38,7 @@ jobs:
         run: node --test eat/tests/test_worker.mjs draw/tests/test_weights.mjs
       - name: Install browser test dependencies
         run: |
+          sudo apt-get update && sudo apt-get install -y gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
           python3 -m pip install -r eat/tests/requirements.txt
           python3 -m playwright install --with-deps chromium webkit
       - name: Check shared storage and responsive UI
