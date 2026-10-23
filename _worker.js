@@ -27,7 +27,11 @@ export default {
 		const url = new URL(请求URL文本);
 		const UA = request.headers.get('User-Agent') || 'null';
 		const upgradeHeader = (request.headers.get('Upgrade') || '').toLowerCase(), contentType = (request.headers.get('content-type') || '').toLowerCase();
-		const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
+		// Test deployment: fail closed until the required ADMIN and KV are configured.
+const 管理员密码 = typeof env.ADMIN === 'string' ? env.ADMIN.replace(/[\r\n]/g, '') : '';
+const 配置错误响应头 = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+if (!管理员密码.trim()) return new Response('Service unavailable: ADMIN is not configured.', { status: 503, headers: 配置错误响应头 });
+if (!env.KV || typeof env.KV.get !== 'function' || typeof env.KV.put !== 'function') return new Response('Service unavailable: KV binding is required.', { status: 503, headers: 配置错误响应头 });
 		const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
 		const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
 		const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
